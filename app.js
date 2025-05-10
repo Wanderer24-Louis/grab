@@ -195,86 +195,14 @@ app.post('/fetch_images', async (req, res) => {
         const $ = cheerio.load(response.data);
         const images = new Set(); // 使用 Set 來避免重複圖片
 
-        // 專門處理 PTT 文章內容
-        const mainContent = $('#main-content').text();
-        if (!mainContent) {
-            console.log('無法找到文章內容');
-            return res.status(404).json({ 
-                error: '無法找到文章內容，請確認網址是否正確' 
-            });
-        }
-
-        console.log('PTT 文章內容長度:', mainContent.length);
-        console.log('PTT 文章內容前 500 字:', mainContent.substring(0, 500));
-
-        // 搜尋所有可能的 imgur 連結模式
-        const imgurPatterns = [
-            'i.imgur.com',
-            'imgur.com',
-            'https://i.imgur.com',
-            'http://i.imgur.com',
-            'https://imgur.com',
-            'http://imgur.com'
-        ];
-
-        // 使用正則表達式搜尋所有可能的 imgur 連結
-        const regexPatterns = [
-            /https?:\/\/i\.imgur\.com\/[a-zA-Z0-9]+/g,
-            /i\.imgur\.com\/[a-zA-Z0-9]+/g,
-            /imgur\.com\/[a-zA-Z0-9]+/g,
-            /\[img\](.*?)\[\/img\]/g,  // 搜尋 [img] 標籤
-            /https?:\/\/imgur\.com\/[a-zA-Z0-9]+/g,
-            /\[url=(.*?)\](.*?)\[\/url\]/g,  // 搜尋 [url] 標籤
-            /\[url\](.*?)\[\/url\]/g,  // 搜尋 [url] 標籤（無參數）
-            /https?:\/\/i\.imgur\.com\/[a-zA-Z0-9]+\.(jpg|jpeg|png|gif)/g,  // 帶副檔名的完整 URL
-            /i\.imgur\.com\/[a-zA-Z0-9]+\.(jpg|jpeg|png|gif)/g  // 帶副檔名的相對 URL
-        ];
-
-        // 搜尋文章內容中的連結
-        for (const regex of regexPatterns) {
-            const matches = mainContent.match(regex);
-            if (matches) {
-                console.log('使用正則表達式', regex, '找到符合的連結:', matches);
-                matches.forEach(match => {
-                    // 如果是 [img] 標籤，提取其中的連結
-                    if (match.startsWith('[img]')) {
-                        match = match.replace('[img]', '').replace('[/img]', '');
-                    }
-                    // 如果是 [url] 標籤，提取其中的連結
-                    else if (match.startsWith('[url=')) {
-                        match = match.replace(/\[url=(.*?)\]/, '$1').replace('[/url]', '');
-                    }
-                    else if (match.startsWith('[url]')) {
-                        match = match.replace('[url]', '').replace('[/url]', '');
-                    }
-                    
-                    // 如果連結沒有 http 開頭，添加 https://
-                    if (!match.startsWith('http')) {
-                        match = 'https://' + match;
-                    }
-                    
-                    console.log('處理連結:', match);
-                    const imageUrl = getImgurImage(match);
-                    if (imageUrl) {
-                        images.add(imageUrl);
-                    }
-                });
-            }
-        }
-
         // 搜尋所有圖片標籤
         $('img').each((i, elem) => {
             const src = $(elem).attr('src');
             if (src) {
                 console.log('找到圖片標籤:', src);
-                for (const pattern of imgurPatterns) {
-                    if (src.includes(pattern)) {
-                        const imageUrl = getImgurImage(src);
-                        if (imageUrl) {
-                            images.add(imageUrl);
-                        }
-                    }
-                }
+                // 將相對路徑轉換為絕對路徑
+                const absoluteUrl = new URL(src, url).href;
+                images.add(absoluteUrl);
             }
         });
 
@@ -283,63 +211,21 @@ app.post('/fetch_images', async (req, res) => {
             const href = $(elem).attr('href');
             if (href) {
                 console.log('找到連結標籤:', href);
-                for (const pattern of imgurPatterns) {
-                    if (href.includes(pattern)) {
-                        const imageUrl = getImgurImage(href);
-                        if (imageUrl) {
-                            images.add(imageUrl);
-                        }
+                if (href.includes('imgur.com')) {
+                    const imageUrl = getImgurImage(href);
+                    if (imageUrl) {
+                        images.add(imageUrl);
                     }
                 }
             }
         });
 
-        // 搜尋所有文字節點
-        $('*').contents().each(function() {
-            if (this.type === 'text') {
-                const text = $(this).text();
-                if (text.includes('imgur.com')) {
-                    console.log('找到包含 imgur 的文字節點:', text);
-                    for (const regex of regexPatterns) {
-                        const matches = text.match(regex);
-                        if (matches) {
-                            matches.forEach(match => {
-                                if (!match.startsWith('http')) {
-                                    match = 'https://' + match;
-                                }
-                                const imageUrl = getImgurImage(match);
-                                if (imageUrl) {
-                                    images.add(imageUrl);
-                                }
-                            });
-                        }
-                    }
-                }
-            }
-        });
-
-        // 使用 Map 來儲存唯一的圖片 URL，以圖片 ID 為鍵
-        const uniqueImages = new Map();
-
-        // 處理所有找到的圖片 URL
-        for (const imageUrl of images) {
-            const processedUrl = await getImgurImage(imageUrl);
-            if (processedUrl) {
-                // 提取圖片 ID
-                const imageId = processedUrl.split('/').pop().split('.')[0];
-                // 如果這個 ID 還沒有被處理過，就加入 Map
-                if (!uniqueImages.has(imageId)) {
-                    uniqueImages.set(imageId, processedUrl);
-                }
-            }
-        }
-
-        console.log('找到的圖片數量:', uniqueImages.size);
-        console.log('找到的圖片:', Array.from(uniqueImages.values()));
+        console.log('找到的圖片數量:', images.size);
+        console.log('找到的圖片:', Array.from(images));
 
         res.json({ 
-            images: Array.from(uniqueImages.values()),
-            source: uniqueImages.size > 0 ? 'found' : 'not_found'
+            images: Array.from(images),
+            source: images.size > 0 ? 'found' : 'not_found'
         });
 
     } catch (error) {

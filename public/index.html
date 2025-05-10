@@ -328,70 +328,27 @@
 
                 console.log('開始處理網址:', url);
                 
-                // 使用 GitHub Pages 的 URL
-                const baseUrl = window.location.origin;
-                const response = await fetch(`${baseUrl}/fetch-ptt?url=${encodeURIComponent(url)}`);
+                const response = await fetch('/fetch_images', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: `url=${encodeURIComponent(url)}`
+                });
+
                 if (!response.ok) {
                     const error = await response.json();
                     throw new Error(error.error || `HTTP error! status: ${response.status}`);
                 }
 
                 const data = await response.json();
-                if (!data || !data.html) {
-                    throw new Error('無法獲取網頁內容');
-                }
-
-                const html = data.html;
-
-                // 使用正則表達式直接從 HTML 內容中搜尋圖片連結
-                const regexPatterns = [
-                    /https?:\/\/i\.imgur\.com\/[a-zA-Z0-9]+/g,
-                    /i\.imgur\.com\/[a-zA-Z0-9]+/g,
-                    /imgur\.com\/[a-zA-Z0-9]+/g,
-                    /\[img\](.*?)\[\/img\]/g,
-                    /https?:\/\/imgur\.com\/[a-zA-Z0-9]+/g,
-                    /\[url=(.*?)\](.*?)\[\/url\]/g,
-                    /\[url\](.*?)\[\/url\]/g,
-                    /https?:\/\/i\.imgur\.com\/[a-zA-Z0-9]+\.(jpg|jpeg|png|gif)/g,
-                    /i\.imgur\.com\/[a-zA-Z0-9]+\.(jpg|jpeg|png|gif)/g
-                ];
-
-                const uniqueImages = new Set();
-
-                // 直接從 HTML 內容中搜尋圖片連結
-                for (const regex of regexPatterns) {
-                    const matches = html.match(regex);
-                    if (matches) {
-                        matches.forEach(match => {
-                            // 處理 [img] 和 [url] 標籤
-                            if (match.startsWith('[img]')) {
-                                match = match.replace('[img]', '').replace('[/img]', '');
-                            } else if (match.startsWith('[url=')) {
-                                match = match.replace(/\[url=(.*?)\]/, '$1').replace('[/url]', '');
-                            } else if (match.startsWith('[url]')) {
-                                match = match.replace('[url]', '').replace('[/url]', '');
-                            }
-
-                            // 確保 URL 格式正確
-                            if (!match.startsWith('http')) {
-                                match = 'https://' + match;
-                            }
-
-                            // 移除查詢參數
-                            match = match.split('?')[0];
-
-                            // 如果是 imgur 連結，轉換為直接圖片連結
-                            if (match.includes('imgur.com')) {
-                                const imageId = match.split('/').pop().split('.')[0];
-                                const directUrl = `https://i.imgur.com/${imageId}.jpg`;
-                                uniqueImages.add(directUrl);
-                            }
-                        });
-                    }
+                
+                if (!data || !data.images) {
+                    throw new Error('無法獲取圖片資料');
                 }
 
                 // 顯示圖片
-                imageUrls = Array.from(uniqueImages);
+                imageUrls = data.images;
                 if (imageUrls.length > 0) {
                     imageUrls.forEach((url, index) => {
                         const img = document.createElement('img');
