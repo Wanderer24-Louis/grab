@@ -1,0 +1,15 @@
+{
+  "name": "web-image-fetcher",
+  "version": "1.0.0",
+  "description": "網頁圖片抓取器",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "axios": "^1.6.7",
+    "cheerio": "^1.0.0-rc.12",
+    "cors": "^2.8.5"
+  }
+} 
