@@ -168,16 +168,42 @@ app.post('/fetch_images', async (req, res) => {
         console.log('開始抓取網頁:', url);
         const response = await axios.get(url, {
             headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
+                'Cache-Control': 'max-age=0'
+            },
+            timeout: 10000, // 10 秒超時
+            validateStatus: function (status) {
+                return status >= 200 && status < 500; // 接受所有 2xx-4xx 的狀態碼
             }
         });
 
         console.log('網頁回應狀態碼:', response.status);
+        
+        // 檢查是否被重定向到登入頁面
+        if (response.data.includes('請先登入') || response.data.includes('請輸入驗證碼')) {
+            console.log('需要登入或驗證碼');
+            return res.status(403).json({ 
+                error: 'PTT 需要登入或驗證碼，請稍後再試' 
+            });
+        }
+
         const $ = cheerio.load(response.data);
         const images = new Set(); // 使用 Set 來避免重複圖片
 
         // 專門處理 PTT 文章內容
         const mainContent = $('#main-content').text();
+        if (!mainContent) {
+            console.log('無法找到文章內容');
+            return res.status(404).json({ 
+                error: '無法找到文章內容，請確認網址是否正確' 
+            });
+        }
+
         console.log('PTT 文章內容長度:', mainContent.length);
         console.log('PTT 文章內容前 500 字:', mainContent.substring(0, 500));
 
