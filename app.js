@@ -180,12 +180,15 @@ app.post('/fetch_images', async (req, res) => {
                 'Accept-Encoding': 'gzip, deflate, br',
                 'Connection': 'keep-alive',
                 'Upgrade-Insecure-Requests': '1',
-                'Cache-Control': 'max-age=0'
+                'Cache-Control': 'max-age=0',
+                'Cookie': 'over18=1'  // 添加 PTT 的 over18 cookie
             },
             timeout: 10000, // 10 秒超時
             validateStatus: function (status) {
                 return status >= 200 && status < 500; // 接受所有 2xx-4xx 的狀態碼
-            }
+            },
+            maxRedirects: 5,  // 允許最多 5 次重定向
+            withCredentials: true  // 允許跨域請求時發送 cookie
         });
 
         console.log('網頁回應狀態碼:', response.status);
@@ -212,6 +215,31 @@ app.post('/fetch_images', async (req, res) => {
             return res.status(403).json({ 
                 error: 'PTT 需要登入或驗證碼，請稍後再試' 
             });
+        }
+
+        // 檢查是否被重定向到 18 禁確認頁面
+        if (response.data.includes('您要繼續嗎？')) {
+            console.log('需要 18 禁確認');
+            // 重新發送請求，帶上 over18 cookie
+            const confirmResponse = await axios.get(url, {
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                    'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',
+                    'Accept-Encoding': 'gzip, deflate, br',
+                    'Connection': 'keep-alive',
+                    'Upgrade-Insecure-Requests': '1',
+                    'Cache-Control': 'max-age=0',
+                    'Cookie': 'over18=1'
+                },
+                timeout: 10000,
+                maxRedirects: 5,
+                withCredentials: true
+            });
+            
+            if (confirmResponse.status === 200) {
+                response = confirmResponse;
+            }
         }
 
         const $ = cheerio.load(response.data);
