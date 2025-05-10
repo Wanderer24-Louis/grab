@@ -5,10 +5,14 @@ const cors = require('cors');
 const path = require('path');
 
 const app = express();
-const port = 3000;
+const port = process.env.PORT || 3000;
 
-// 啟用 CORS
-app.use(cors());
+// 啟用 CORS，設定允許的來源
+app.use(cors({
+    origin: ['https://wanderer24-louis.github.io', 'http://localhost:3000'],
+    methods: ['GET', 'POST'],
+    credentials: true
+}));
 
 // 設定 JSON 解析
 app.use(express.json());

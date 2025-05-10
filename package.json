@@ -2,12 +2,18 @@
   "name": "ptt-image-grabber",
   "version": "1.0.0",
   "description": "PTT 圖片抓取器",
-  "main": "server.js",
+  "main": "app.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node app.js",
+    "dev": "nodemon app.js"
   },
   "dependencies": {
     "express": "^4.18.2",
-    "axios": "^1.6.2"
+    "axios": "^1.6.2",
+    "cheerio": "^1.0.0-rc.12",
+    "cors": "^2.8.5"
+  },
+  "engines": {
+    "node": ">=14.0.0"
   }
 } 
