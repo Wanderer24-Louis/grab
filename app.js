@@ -4,18 +4,17 @@ const cheerio = require('cheerio');
 const cors = require('cors');
 const path = require('path');
 const tough = require('tough-cookie');
-const axiosCookieJarSupport = require('axios-cookiejar-support').default;
+const { wrapper } = require('axios-cookiejar-support');
 
 const app = express();
 const port = process.env.PORT || 3000;
 
 // 設定 cookie jar
 const cookieJar = new tough.CookieJar();
-const client = axios.create({
+const client = wrapper(axios.create({
     jar: cookieJar,
     withCredentials: true
-});
-axiosCookieJarSupport(client);
+}));
 
 // 啟用 CORS，設定允許的來源
 app.use(cors({
