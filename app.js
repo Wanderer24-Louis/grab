@@ -230,9 +230,27 @@ app.post('/fetch_images', async (req, res) => {
                 /https?:\/\/[^\s<>"]+?\.(?:jpg|jpeg|gif|png)/gi,  // 直接圖片連結
                 /https?:\/\/[^\s<>"]+?imgur\.com\/[^\s<>"]+/gi,   // Imgur 連結
                 /https?:\/\/[^\s<>"]+?\.imgur\.com\/[^\s<>"]+/gi, // 其他 Imgur 子域名
-                /https?:\/\/[^\s<>"]+?\.(?:imgur|imgbb|flickr|photobucket)\.com\/[^\s<>"]+/gi  // 其他圖片網站
+                /https?:\/\/[^\s<>"]+?\.(?:imgur|imgbb|flickr|photobucket)\.com\/[^\s<>"]+/gi,  // 其他圖片網站
+                /https?:\/\/[^\s<>"]+?\.(?:imgur|imgbb|flickr|photobucket)\.com\/[^\s<>"]+\.(?:jpg|jpeg|gif|png)/gi  // 帶副檔名的圖片網站連結
             ];
 
+            // 3. 處理文章內容中的純文字連結
+            const textContent = $('.bbs-screen.bbs-content').text();
+            const textLinks = textContent.match(/https?:\/\/[^\s<>"]+/g) || [];
+            console.log('從純文字中找到的連結:', textLinks);
+
+            for (const link of textLinks) {
+                if (link.includes('imgur.com')) {
+                    const imageUrl = await getImgurImage(link);
+                    if (imageUrl) {
+                        images.add(imageUrl);
+                    }
+                } else if (link.match(/\.(jpg|jpeg|gif|png)$/i)) {
+                    images.add(link);
+                }
+            }
+
+            // 4. 處理所有圖片模式
             for (const pattern of imagePatterns) {
                 const matches = content.match(pattern) || [];
                 console.log(`使用模式 ${pattern} 找到的連結:`, matches);
@@ -249,7 +267,7 @@ app.post('/fetch_images', async (req, res) => {
                 }
             }
 
-            // 3. 搜尋文章中的圖片標籤
+            // 5. 搜尋文章中的圖片標籤
             $('.bbs-screen.bbs-content img').each((i, elem) => {
                 const src = $(elem).attr('src');
                 if (src) {
@@ -263,7 +281,7 @@ app.post('/fetch_images', async (req, res) => {
                 }
             });
 
-            // 4. 搜尋文章中的連結標籤
+            // 6. 搜尋文章中的連結標籤
             $('.bbs-screen.bbs-content a').each((i, elem) => {
                 const href = $(elem).attr('href');
                 if (href) {
@@ -283,6 +301,19 @@ app.post('/fetch_images', async (req, res) => {
                     }
                 }
             });
+
+            // 7. 處理文章中的純文字 Imgur ID
+            const imgurIdPattern = /imgur\.com\/([a-zA-Z0-9]+)/g;
+            let match;
+            while ((match = imgurIdPattern.exec(textContent)) !== null) {
+                const imgurId = match[1];
+                const imgurUrl = `https://imgur.com/${imgurId}`;
+                console.log('找到 Imgur ID:', imgurId);
+                const imageUrl = await getImgurImage(imgurUrl);
+                if (imageUrl) {
+                    images.add(imageUrl);
+                }
+            }
         }
 
         console.log('找到的圖片數量:', images.size);
