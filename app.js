@@ -369,6 +369,20 @@ app.post('/fetch_images', async (req, res) => {
                     }
                 }
 
+                // 特別處理 Baseball 版的圖片
+                if (url.includes('/Baseball/')) {
+                    // 搜尋文章中的 imgur 連結
+                    const imgurLinks = content.match(/https?:\/\/[^\s<>"]+?imgur\.com\/[^\s<>"]+/gi) || [];
+                    console.log('Baseball 版找到的 imgur 連結:', imgurLinks);
+                    
+                    for (const link of imgurLinks) {
+                        const imageUrl = await getImgurImage(link);
+                        if (imageUrl) {
+                            images.add(imageUrl);
+                        }
+                    }
+                }
+
                 console.log('找到的圖片數量:', images.size);
                 console.log('找到的圖片:', Array.from(images));
 
