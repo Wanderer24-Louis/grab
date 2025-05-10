@@ -1,19 +1,24 @@
 {
   "name": "ptt-image-grabber",
   "version": "1.0.0",
-  "description": "PTT 圖片抓取器",
+  "description": "PTT 圖片抓取工具",
   "main": "app.js",
   "scripts": {
     "start": "node app.js",
     "dev": "nodemon app.js"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "axios": "^1.6.2",
+    "axios": "^1.6.7",
+    "axios-cookiejar-support": "^4.0.7",
     "cheerio": "^1.0.0-rc.12",
-    "cors": "^2.8.5"
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "tough-cookie": "^4.1.3"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.3"
   },
   "engines": {
-    "node": ">=14.0.0"
+    "node": ">=18.0.0"
   }
 } 
