@@ -188,6 +188,13 @@ app.post('/fetch_images', async (req, res) => {
         
         // 檢查回應內容類型
         const contentType = response.headers['content-type'];
+        if (contentType && contentType.includes('image/')) {
+            // 直接回傳圖片連結
+            return res.status(200).json({
+                images: [url],
+                source: 'direct-image'
+            });
+        }
         if (!contentType || !contentType.includes('text/html')) {
             console.log('非 HTML 回應:', contentType);
             return res.status(400).json({ 
