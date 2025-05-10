@@ -315,6 +315,7 @@
             const loadingDiv = document.getElementById('loading');
             const imageContainer = document.getElementById('imageContainer');
             const errorDiv = document.getElementById('error');
+            const debugInfo = document.getElementById('debugInfo');
 
             if (!url) {
                 showError('請輸入網址');
@@ -325,6 +326,7 @@
                 loadingDiv.style.display = 'block';
                 errorDiv.style.display = 'none';
                 imageContainer.innerHTML = '';
+                debugInfo.style.display = 'none';
 
                 console.log('開始處理網址:', url);
                 
@@ -336,13 +338,18 @@
                     body: `url=${encodeURIComponent(url)}`
                 });
 
-                if (!response.ok) {
-                    const error = await response.json();
-                    throw new Error(error.error || `HTTP error! status: ${response.status}`);
+                // 檢查回應的 Content-Type
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    throw new Error('伺服器回應格式錯誤');
                 }
 
                 const data = await response.json();
                 
+                if (!response.ok) {
+                    throw new Error(data.error || `HTTP error! status: ${response.status}`);
+                }
+
                 if (!data || !data.images) {
                     throw new Error('無法獲取圖片資料');
                 }
@@ -355,6 +362,10 @@
                         img.src = url;
                         img.alt = `圖片 ${index + 1}`;
                         img.onclick = () => showModal(index);
+                        img.onerror = () => {
+                            console.error('圖片載入失敗:', url);
+                            img.style.display = 'none';
+                        };
                         imageContainer.appendChild(img);
                     });
                 } else {
@@ -364,6 +375,10 @@
             } catch (error) {
                 console.error('發生錯誤:', error);
                 showError('抓取圖片時發生錯誤：' + error.message);
+                
+                // 顯示詳細的錯誤資訊
+                debugInfo.style.display = 'block';
+                debugInfo.textContent = `錯誤詳情：\n${error.stack || error.message}`;
             } finally {
                 loadingDiv.style.display = 'none';
             }

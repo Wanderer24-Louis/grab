@@ -10,10 +10,12 @@ const port = 3000;
 // 啟用 CORS
 app.use(cors());
 
-// 提供靜態檔案
-app.use(express.static('public'));
+// 設定 JSON 解析
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// 提供靜態檔案
+app.use(express.static(path.join(__dirname, 'public')));
 
 // 首頁路由
 app.get('/', (req, res) => {
@@ -158,7 +160,7 @@ app.post('/fetch_images', async (req, res) => {
             console.log('處理後的圖片 URL:', imageUrl);
             
             if (imageUrl) {
-                return res.json({
+                return res.status(200).json({
                     images: [imageUrl],
                     source: 'direct'
                 });
@@ -184,6 +186,15 @@ app.post('/fetch_images', async (req, res) => {
 
         console.log('網頁回應狀態碼:', response.status);
         
+        // 檢查回應內容類型
+        const contentType = response.headers['content-type'];
+        if (!contentType || !contentType.includes('text/html')) {
+            console.log('非 HTML 回應:', contentType);
+            return res.status(400).json({ 
+                error: '無法解析網頁內容，請確認網址是否正確' 
+            });
+        }
+
         // 檢查是否被重定向到登入頁面
         if (response.data.includes('請先登入') || response.data.includes('請輸入驗證碼')) {
             console.log('需要登入或驗證碼');
@@ -200,9 +211,13 @@ app.post('/fetch_images', async (req, res) => {
             const src = $(elem).attr('src');
             if (src) {
                 console.log('找到圖片標籤:', src);
-                // 將相對路徑轉換為絕對路徑
-                const absoluteUrl = new URL(src, url).href;
-                images.add(absoluteUrl);
+                try {
+                    // 將相對路徑轉換為絕對路徑
+                    const absoluteUrl = new URL(src, url).href;
+                    images.add(absoluteUrl);
+                } catch (error) {
+                    console.error('處理圖片 URL 時發生錯誤:', error);
+                }
             }
         });
 
@@ -223,15 +238,36 @@ app.post('/fetch_images', async (req, res) => {
         console.log('找到的圖片數量:', images.size);
         console.log('找到的圖片:', Array.from(images));
 
-        res.json({ 
+        // 確保回應是有效的 JSON
+        res.setHeader('Content-Type', 'application/json');
+        return res.status(200).json({ 
             images: Array.from(images),
             source: images.size > 0 ? 'found' : 'not_found'
         });
 
     } catch (error) {
         console.error('抓取圖片時發生錯誤:', error);
-        res.status(500).json({ error: `無法抓取圖片：${error.message}` });
+        return res.status(500).json({ 
+            error: `無法抓取圖片：${error.message}`,
+            details: error.stack
+        });
     }
+});
+
+// 錯誤處理中間件
+app.use((err, req, res, next) => {
+    console.error('伺服器錯誤:', err);
+    res.status(500).json({
+        error: '伺服器內部錯誤',
+        message: err.message
+    });
+});
+
+// 處理 404 錯誤
+app.use((req, res) => {
+    res.status(404).json({
+        error: '找不到請求的資源'
+    });
 });
 
 app.listen(port, () => {
