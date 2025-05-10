@@ -3,9 +3,19 @@ const axios = require('axios');
 const cheerio = require('cheerio');
 const cors = require('cors');
 const path = require('path');
+const tough = require('tough-cookie');
+const axiosCookieJarSupport = require('axios-cookiejar-support').default;
 
 const app = express();
 const port = process.env.PORT || 3000;
+
+// 設定 cookie jar
+const cookieJar = new tough.CookieJar();
+const client = axios.create({
+    jar: cookieJar,
+    withCredentials: true
+});
+axiosCookieJarSupport(client);
 
 // 啟用 CORS，設定允許的來源
 app.use(cors({
@@ -172,7 +182,23 @@ app.post('/fetch_images', async (req, res) => {
         }
 
         console.log('開始抓取網頁:', url);
-        const response = await axios.get(url, {
+        
+        // 先訪問 PTT 首頁以獲取 cookie
+        if (url.includes('ptt.cc')) {
+            try {
+                await client.get('https://www.ptt.cc/bbs/index.html', {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                    }
+                });
+                console.log('成功獲取 PTT cookie');
+            } catch (error) {
+                console.error('獲取 PTT cookie 時發生錯誤:', error);
+            }
+        }
+
+        // 發送實際請求
+        const response = await client.get(url, {
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -180,15 +206,10 @@ app.post('/fetch_images', async (req, res) => {
                 'Accept-Encoding': 'gzip, deflate, br',
                 'Connection': 'keep-alive',
                 'Upgrade-Insecure-Requests': '1',
-                'Cache-Control': 'max-age=0',
-                'Cookie': 'over18=1'  // 添加 PTT 的 over18 cookie
+                'Cache-Control': 'max-age=0'
             },
-            timeout: 10000, // 10 秒超時
-            validateStatus: function (status) {
-                return status >= 200 && status < 500; // 接受所有 2xx-4xx 的狀態碼
-            },
-            maxRedirects: 5,  // 允許最多 5 次重定向
-            withCredentials: true  // 允許跨域請求時發送 cookie
+            timeout: 10000,
+            maxRedirects: 5
         });
 
         console.log('網頁回應狀態碼:', response.status);
@@ -221,7 +242,7 @@ app.post('/fetch_images', async (req, res) => {
         if (response.data.includes('您要繼續嗎？')) {
             console.log('需要 18 禁確認');
             // 重新發送請求，帶上 over18 cookie
-            const confirmResponse = await axios.get(url, {
+            const confirmResponse = await client.get(url, {
                 headers: {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
                     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -229,12 +250,10 @@ app.post('/fetch_images', async (req, res) => {
                     'Accept-Encoding': 'gzip, deflate, br',
                     'Connection': 'keep-alive',
                     'Upgrade-Insecure-Requests': '1',
-                    'Cache-Control': 'max-age=0',
-                    'Cookie': 'over18=1'
+                    'Cache-Control': 'max-age=0'
                 },
                 timeout: 10000,
-                maxRedirects: 5,
-                withCredentials: true
+                maxRedirects: 5
             });
             
             if (confirmResponse.status === 200) {
