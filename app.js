@@ -188,14 +188,21 @@ app.post('/fetch_images', async (req, res) => {
                 // 1. 先訪問 PTT 首頁
                 await client.get('https://www.ptt.cc/bbs/index.html', {
                     headers: {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                        'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',
+                        'Accept-Encoding': 'gzip, deflate, br',
+                        'Connection': 'keep-alive',
+                        'Upgrade-Insecure-Requests': '1',
+                        'Cache-Control': 'max-age=0',
+                        'Referer': 'https://www.ptt.cc/'
                     }
                 });
                 console.log('成功訪問 PTT 首頁');
 
                 // 2. 設置 over18 cookie
                 await cookieJar.setCookie(
-                    'over18=1; Path=/; Domain=ptt.cc',
+                    'over18=1; Path=/; Domain=ptt.cc; Secure; SameSite=None',
                     'https://www.ptt.cc'
                 );
                 console.log('設置 over18 cookie');
@@ -209,13 +216,23 @@ app.post('/fetch_images', async (req, res) => {
                         'Accept-Encoding': 'gzip, deflate, br',
                         'Connection': 'keep-alive',
                         'Upgrade-Insecure-Requests': '1',
-                        'Cache-Control': 'max-age=0'
+                        'Cache-Control': 'max-age=0',
+                        'Referer': 'https://www.ptt.cc/',
+                        'Origin': 'https://www.ptt.cc',
+                        'Sec-Fetch-Dest': 'document',
+                        'Sec-Fetch-Mode': 'navigate',
+                        'Sec-Fetch-Site': 'same-origin',
+                        'Sec-Fetch-User': '?1'
                     },
                     timeout: 10000,
-                    maxRedirects: 5
+                    maxRedirects: 5,
+                    validateStatus: function (status) {
+                        return status >= 200 && status < 500;
+                    }
                 });
 
                 console.log('網頁回應狀態碼:', response.status);
+                console.log('回應標頭:', response.headers);
                 
                 // 檢查回應內容類型
                 const contentType = response.headers['content-type'];
@@ -238,6 +255,39 @@ app.post('/fetch_images', async (req, res) => {
                     return res.status(403).json({ 
                         error: 'PTT 需要登入或驗證碼，請稍後再試' 
                     });
+                }
+
+                // 檢查是否被重定向到 18 禁確認頁面
+                if (response.data.includes('您要繼續嗎？')) {
+                    console.log('需要 18 禁確認');
+                    // 重新發送請求，帶上 over18 cookie
+                    const confirmResponse = await client.post('https://www.ptt.cc/ask/over18', 
+                        'from=' + encodeURIComponent(url) + '&yes=yes',
+                        {
+                            headers: {
+                                'Content-Type': 'application/x-www-form-urlencoded',
+                                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                                'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',
+                                'Accept-Encoding': 'gzip, deflate, br',
+                                'Connection': 'keep-alive',
+                                'Upgrade-Insecure-Requests': '1',
+                                'Cache-Control': 'max-age=0',
+                                'Referer': url,
+                                'Origin': 'https://www.ptt.cc',
+                                'Sec-Fetch-Dest': 'document',
+                                'Sec-Fetch-Mode': 'navigate',
+                                'Sec-Fetch-Site': 'same-origin',
+                                'Sec-Fetch-User': '?1'
+                            },
+                            timeout: 10000,
+                            maxRedirects: 5
+                        }
+                    );
+                    
+                    if (confirmResponse.status === 200) {
+                        response = confirmResponse;
+                    }
                 }
 
                 const $ = cheerio.load(response.data);
