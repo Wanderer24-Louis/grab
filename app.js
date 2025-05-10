@@ -194,7 +194,8 @@ app.post('/fetch_images', async (req, res) => {
                         'Accept-Encoding': 'gzip, deflate, br',
                         'Connection': 'keep-alive',
                         'Upgrade-Insecure-Requests': '1',
-                        'Cache-Control': 'max-age=0',
+                        'Cache-Control': 'no-cache',
+                        'Pragma': 'no-cache',
                         'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
                         'Sec-Ch-Ua-Mobile': '?0',
                         'Sec-Ch-Ua-Platform': '"Windows"',
@@ -213,7 +214,8 @@ app.post('/fetch_images', async (req, res) => {
                     domain: 'www.ptt.cc',
                     path: '/',
                     secure: true,
-                    sameSite: 'none'
+                    sameSite: 'none',
+                    httpOnly: false
                 });
                 await cookieJar.setCookie(cookie, 'https://www.ptt.cc');
                 console.log('設置 over18 cookie');
@@ -227,7 +229,8 @@ app.post('/fetch_images', async (req, res) => {
                         'Accept-Encoding': 'gzip, deflate, br',
                         'Connection': 'keep-alive',
                         'Upgrade-Insecure-Requests': '1',
-                        'Cache-Control': 'max-age=0',
+                        'Cache-Control': 'no-cache',
+                        'Pragma': 'no-cache',
                         'Referer': 'https://www.ptt.cc/',
                         'Origin': 'https://www.ptt.cc',
                         'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
@@ -247,48 +250,38 @@ app.post('/fetch_images', async (req, res) => {
 
                 console.log('網頁回應狀態碼:', response.status);
                 console.log('回應標頭:', response.headers);
-                
-                // 檢查回應內容類型
-                const contentType = response.headers['content-type'];
-                if (contentType && contentType.includes('image/')) {
-                    return res.status(200).json({
-                        images: [url],
-                        source: 'direct-image'
-                    });
-                }
-                if (!contentType || !contentType.includes('text/html')) {
-                    console.log('非 HTML 回應:', contentType);
-                    return res.status(400).json({ 
-                        error: '無法解析網頁內容，請確認網址是否正確' 
-                    });
-                }
-
-                // 檢查是否被重定向到登入頁面
-                if (response.data.includes('請先登入') || response.data.includes('請輸入驗證碼')) {
-                    console.log('需要登入或驗證碼');
-                    return res.status(403).json({ 
-                        error: 'PTT 需要登入或驗證碼，請稍後再試' 
-                    });
-                }
 
                 // 檢查是否被重定向到 18 禁確認頁面
                 if (response.data.includes('您要繼續嗎？')) {
                     console.log('需要 18 禁確認');
-                    // 重新發送請求，帶上 over18 cookie
-                    const confirmResponse = await client.post('https://www.ptt.cc/ask/over18', 
-                        'from=' + encodeURIComponent(url) + '&yes=yes',
+                    
+                    // 從回應中提取表單數據
+                    const $ = cheerio.load(response.data);
+                    const formAction = $('form').attr('action');
+                    const formData = new URLSearchParams();
+                    formData.append('from', url);
+                    formData.append('yes', 'yes');
+
+                    // 發送確認請求
+                    const confirmResponse = await client.post(
+                        'https://www.ptt.cc' + formAction,
+                        formData.toString(),
                         {
                             headers: {
                                 'Content-Type': 'application/x-www-form-urlencoded',
-                                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
                                 'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',
                                 'Accept-Encoding': 'gzip, deflate, br',
                                 'Connection': 'keep-alive',
                                 'Upgrade-Insecure-Requests': '1',
-                                'Cache-Control': 'max-age=0',
+                                'Cache-Control': 'no-cache',
+                                'Pragma': 'no-cache',
                                 'Referer': url,
                                 'Origin': 'https://www.ptt.cc',
+                                'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+                                'Sec-Ch-Ua-Mobile': '?0',
+                                'Sec-Ch-Ua-Platform': '"Windows"',
                                 'Sec-Fetch-Dest': 'document',
                                 'Sec-Fetch-Mode': 'navigate',
                                 'Sec-Fetch-Site': 'same-origin',
@@ -302,6 +295,29 @@ app.post('/fetch_images', async (req, res) => {
                     if (confirmResponse.status === 200) {
                         response = confirmResponse;
                     }
+                }
+
+                // 檢查是否被重定向到登入頁面
+                if (response.data.includes('請先登入') || response.data.includes('請輸入驗證碼')) {
+                    console.log('需要登入或驗證碼');
+                    return res.status(403).json({ 
+                        error: 'PTT 需要登入或驗證碼，請稍後再試' 
+                    });
+                }
+
+                // 檢查回應內容類型
+                const contentType = response.headers['content-type'];
+                if (contentType && contentType.includes('image/')) {
+                    return res.status(200).json({
+                        images: [url],
+                        source: 'direct-image'
+                    });
+                }
+                if (!contentType || !contentType.includes('text/html')) {
+                    console.log('非 HTML 回應:', contentType);
+                    return res.status(400).json({ 
+                        error: '無法解析網頁內容，請確認網址是否正確' 
+                    });
                 }
 
                 const $ = cheerio.load(response.data);
