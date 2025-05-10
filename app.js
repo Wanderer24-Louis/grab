@@ -186,32 +186,43 @@ app.post('/fetch_images', async (req, res) => {
         if (url.includes('ptt.cc')) {
             try {
                 // 1. 先訪問 PTT 首頁
-                await client.get('https://www.ptt.cc/bbs/index.html', {
+                const homeResponse = await client.get('https://www.ptt.cc/bbs/index.html', {
                     headers: {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
                         'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',
                         'Accept-Encoding': 'gzip, deflate, br',
                         'Connection': 'keep-alive',
                         'Upgrade-Insecure-Requests': '1',
                         'Cache-Control': 'max-age=0',
-                        'Referer': 'https://www.ptt.cc/'
+                        'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+                        'Sec-Ch-Ua-Mobile': '?0',
+                        'Sec-Ch-Ua-Platform': '"Windows"',
+                        'Sec-Fetch-Dest': 'document',
+                        'Sec-Fetch-Mode': 'navigate',
+                        'Sec-Fetch-Site': 'none',
+                        'Sec-Fetch-User': '?1'
                     }
                 });
                 console.log('成功訪問 PTT 首頁');
 
                 // 2. 設置 over18 cookie
-                await cookieJar.setCookie(
-                    'over18=1; Path=/; Domain=ptt.cc; Secure; SameSite=None',
-                    'https://www.ptt.cc'
-                );
+                const cookie = new tough.Cookie({
+                    key: 'over18',
+                    value: '1',
+                    domain: 'www.ptt.cc',
+                    path: '/',
+                    secure: true,
+                    sameSite: 'none'
+                });
+                await cookieJar.setCookie(cookie, 'https://www.ptt.cc');
                 console.log('設置 over18 cookie');
 
                 // 3. 訪問目標文章
-                const response = await client.get(url, {
+                let response = await client.get(url, {
                     headers: {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
                         'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',
                         'Accept-Encoding': 'gzip, deflate, br',
                         'Connection': 'keep-alive',
@@ -219,6 +230,9 @@ app.post('/fetch_images', async (req, res) => {
                         'Cache-Control': 'max-age=0',
                         'Referer': 'https://www.ptt.cc/',
                         'Origin': 'https://www.ptt.cc',
+                        'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+                        'Sec-Ch-Ua-Mobile': '?0',
+                        'Sec-Ch-Ua-Platform': '"Windows"',
                         'Sec-Fetch-Dest': 'document',
                         'Sec-Fetch-Mode': 'navigate',
                         'Sec-Fetch-Site': 'same-origin',
