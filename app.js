@@ -217,54 +217,72 @@ app.post('/fetch_images', async (req, res) => {
         const $ = cheerio.load(response.data);
         const images = new Set(); // 使用 Set 來避免重複圖片
 
-        // 搜尋所有圖片標籤
-        $('img').each((i, elem) => {
-            const src = $(elem).attr('src');
-            if (src) {
-                console.log('找到圖片標籤:', src);
-                try {
-                    // 將相對路徑轉換為絕對路徑
-                    const absoluteUrl = new URL(src, url).href;
-                    images.add(absoluteUrl);
-                } catch (error) {
-                    console.error('處理圖片 URL 時發生錯誤:', error);
-                }
-            }
-        });
-
-        // 搜尋所有連結
-        $('a').each((i, elem) => {
-            const href = $(elem).attr('href');
-            if (href) {
-                console.log('找到連結標籤:', href);
-                if (href.includes('imgur.com')) {
-                    const imageUrl = getImgurImage(href);
-                    if (imageUrl) {
-                        images.add(imageUrl);
-                    }
-                }
-            }
-        });
-
         // 特別處理 PTT 文章中的圖片
         if (url.includes('ptt.cc')) {
-            // 搜尋文章內容中的圖片連結
-            const content = $('.article-metaline + .article-metaline-right + .article-metaline + .bbs-screen.bbs-content').text();
-            const imgurLinks = content.match(/https?:\/\/[^\s<>"]+?\.(?:jpg|jpeg|gif|png)/gi) || [];
-            const imgurUrls = content.match(/https?:\/\/[^\s<>"]+?imgur\.com\/[^\s<>"]+/gi) || [];
+            console.log('處理 PTT 文章');
+            
+            // 1. 從文章內容中提取所有可能的圖片連結
+            const content = $('.bbs-screen.bbs-content').html() || '';
+            console.log('文章內容:', content);
 
-            console.log('找到的 imgur 圖片連結:', imgurLinks);
-            console.log('找到的 imgur 網頁連結:', imgurUrls);
+            // 2. 搜尋所有圖片相關的連結
+            const imagePatterns = [
+                /https?:\/\/[^\s<>"]+?\.(?:jpg|jpeg|gif|png)/gi,  // 直接圖片連結
+                /https?:\/\/[^\s<>"]+?imgur\.com\/[^\s<>"]+/gi,   // Imgur 連結
+                /https?:\/\/[^\s<>"]+?\.imgur\.com\/[^\s<>"]+/gi, // 其他 Imgur 子域名
+                /https?:\/\/[^\s<>"]+?\.(?:imgur|imgbb|flickr|photobucket)\.com\/[^\s<>"]+/gi  // 其他圖片網站
+            ];
 
-            // 處理所有找到的連結
-            for (const link of [...imgurLinks, ...imgurUrls]) {
-                if (link.includes('imgur.com')) {
-                    const imageUrl = await getImgurImage(link);
-                    if (imageUrl) {
-                        images.add(imageUrl);
+            for (const pattern of imagePatterns) {
+                const matches = content.match(pattern) || [];
+                console.log(`使用模式 ${pattern} 找到的連結:`, matches);
+                
+                for (const link of matches) {
+                    if (link.includes('imgur.com')) {
+                        const imageUrl = await getImgurImage(link);
+                        if (imageUrl) {
+                            images.add(imageUrl);
+                        }
+                    } else {
+                        images.add(link);
                     }
                 }
             }
+
+            // 3. 搜尋文章中的圖片標籤
+            $('.bbs-screen.bbs-content img').each((i, elem) => {
+                const src = $(elem).attr('src');
+                if (src) {
+                    console.log('找到文章中的圖片標籤:', src);
+                    try {
+                        const absoluteUrl = new URL(src, url).href;
+                        images.add(absoluteUrl);
+                    } catch (error) {
+                        console.error('處理圖片 URL 時發生錯誤:', error);
+                    }
+                }
+            });
+
+            // 4. 搜尋文章中的連結標籤
+            $('.bbs-screen.bbs-content a').each((i, elem) => {
+                const href = $(elem).attr('href');
+                if (href) {
+                    console.log('找到文章中的連結:', href);
+                    if (href.includes('imgur.com')) {
+                        const imageUrl = getImgurImage(href);
+                        if (imageUrl) {
+                            images.add(imageUrl);
+                        }
+                    } else if (href.match(/\.(jpg|jpeg|gif|png)$/i)) {
+                        try {
+                            const absoluteUrl = new URL(href, url).href;
+                            images.add(absoluteUrl);
+                        } catch (error) {
+                            console.error('處理圖片 URL 時發生錯誤:', error);
+                        }
+                    }
+                }
+            });
         }
 
         console.log('找到的圖片數量:', images.size);
