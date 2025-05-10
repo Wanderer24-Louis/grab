@@ -284,6 +284,31 @@
             debugInfo.textContent += message + '\n';
         }
 
+        // 添加重試函數
+        async function fetchWithRetry(url, options, maxRetries = 3) {
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    const response = await fetch(url, options);
+                    if (response.ok) {
+                        return response;
+                    }
+                    // 如果是最後一次重試，拋出錯誤
+                    if (i === maxRetries - 1) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    // 等待一段時間後重試
+                    await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
+                } catch (error) {
+                    // 如果是最後一次重試，拋出錯誤
+                    if (i === maxRetries - 1) {
+                        throw error;
+                    }
+                    // 等待一段時間後重試
+                    await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
+                }
+            }
+        }
+
         async function fetchImages() {
             const urlInput = document.getElementById('urlInput');
             const url = urlInput.value.trim();
@@ -303,24 +328,22 @@
 
                 console.log('開始處理網址:', url);
                 
-                // 直接從 PTT 抓取圖片
-                const response = await fetch(url, {
-                    headers: {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                        'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7'
-                    }
-                });
-
+                // 使用 GitHub Pages 的 URL
+                const baseUrl = window.location.origin;
+                const response = await fetch(`${baseUrl}/fetch-ptt?url=${encodeURIComponent(url)}`);
                 if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+                    const error = await response.json();
+                    throw new Error(error.error || `HTTP error! status: ${response.status}`);
                 }
 
-                const html = await response.text();
-                const parser = new DOMParser();
-                const doc = parser.parseFromString(html, 'text/html');
-                
-                // 使用正則表達式搜尋所有可能的 imgur 連結
+                const data = await response.json();
+                if (!data || !data.html) {
+                    throw new Error('無法獲取網頁內容');
+                }
+
+                const html = data.html;
+
+                // 使用正則表達式直接從 HTML 內容中搜尋圖片連結
                 const regexPatterns = [
                     /https?:\/\/i\.imgur\.com\/[a-zA-Z0-9]+/g,
                     /i\.imgur\.com\/[a-zA-Z0-9]+/g,
@@ -335,50 +358,35 @@
 
                 const uniqueImages = new Set();
 
-                // 搜尋文章內容
-                const mainContent = doc.getElementById('main-content');
-                if (mainContent) {
-                    const content = mainContent.textContent;
-                    for (const regex of regexPatterns) {
-                        const matches = content.match(regex);
-                        if (matches) {
-                            matches.forEach(match => {
-                                // 處理 [img] 和 [url] 標籤
-                                if (match.startsWith('[img]')) {
-                                    match = match.replace('[img]', '').replace('[/img]', '');
-                                } else if (match.startsWith('[url=')) {
-                                    match = match.replace(/\[url=(.*?)\]/, '$1').replace('[/url]', '');
-                                } else if (match.startsWith('[url]')) {
-                                    match = match.replace('[url]', '').replace('[/url]', '');
-                                }
+                // 直接從 HTML 內容中搜尋圖片連結
+                for (const regex of regexPatterns) {
+                    const matches = html.match(regex);
+                    if (matches) {
+                        matches.forEach(match => {
+                            // 處理 [img] 和 [url] 標籤
+                            if (match.startsWith('[img]')) {
+                                match = match.replace('[img]', '').replace('[/img]', '');
+                            } else if (match.startsWith('[url=')) {
+                                match = match.replace(/\[url=(.*?)\]/, '$1').replace('[/url]', '');
+                            } else if (match.startsWith('[url]')) {
+                                match = match.replace('[url]', '').replace('[/url]', '');
+                            }
 
-                                // 確保 URL 格式正確
-                                if (!match.startsWith('http')) {
-                                    match = 'https://' + match;
-                                }
+                            // 確保 URL 格式正確
+                            if (!match.startsWith('http')) {
+                                match = 'https://' + match;
+                            }
 
-                                // 移除查詢參數
-                                match = match.split('?')[0];
+                            // 移除查詢參數
+                            match = match.split('?')[0];
 
-                                // 如果是 imgur 連結，轉換為直接圖片連結
-                                if (match.includes('imgur.com')) {
-                                    const imageId = match.split('/').pop().split('.')[0];
-                                    const directUrl = `https://i.imgur.com/${imageId}.jpg`;
-                                    uniqueImages.add(directUrl);
-                                }
-                            });
-                        }
-                    }
-                }
-
-                // 搜尋所有圖片標籤
-                const images = doc.getElementsByTagName('img');
-                for (const img of images) {
-                    const src = img.src;
-                    if (src && src.includes('imgur.com')) {
-                        const imageId = src.split('/').pop().split('.')[0];
-                        const directUrl = `https://i.imgur.com/${imageId}.jpg`;
-                        uniqueImages.add(directUrl);
+                            // 如果是 imgur 連結，轉換為直接圖片連結
+                            if (match.includes('imgur.com')) {
+                                const imageId = match.split('/').pop().split('.')[0];
+                                const directUrl = `https://i.imgur.com/${imageId}.jpg`;
+                                uniqueImages.add(directUrl);
+                            }
+                        });
                     }
                 }
 
