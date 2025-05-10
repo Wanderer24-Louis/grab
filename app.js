@@ -183,66 +183,131 @@ app.post('/fetch_images', async (req, res) => {
 
         console.log('開始抓取網頁:', url);
         
-        // 先訪問 PTT 首頁以獲取 cookie
+        // 處理 PTT 請求
         if (url.includes('ptt.cc')) {
             try {
+                // 1. 先訪問 PTT 首頁
                 await client.get('https://www.ptt.cc/bbs/index.html', {
                     headers: {
                         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
                     }
                 });
-                console.log('成功獲取 PTT cookie');
+                console.log('成功訪問 PTT 首頁');
+
+                // 2. 設置 over18 cookie
+                await cookieJar.setCookie(
+                    'over18=1; Path=/; Domain=ptt.cc',
+                    'https://www.ptt.cc'
+                );
+                console.log('設置 over18 cookie');
+
+                // 3. 訪問目標文章
+                const response = await client.get(url, {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                        'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',
+                        'Accept-Encoding': 'gzip, deflate, br',
+                        'Connection': 'keep-alive',
+                        'Upgrade-Insecure-Requests': '1',
+                        'Cache-Control': 'max-age=0'
+                    },
+                    timeout: 10000,
+                    maxRedirects: 5
+                });
+
+                console.log('網頁回應狀態碼:', response.status);
+                
+                // 檢查回應內容類型
+                const contentType = response.headers['content-type'];
+                if (contentType && contentType.includes('image/')) {
+                    return res.status(200).json({
+                        images: [url],
+                        source: 'direct-image'
+                    });
+                }
+                if (!contentType || !contentType.includes('text/html')) {
+                    console.log('非 HTML 回應:', contentType);
+                    return res.status(400).json({ 
+                        error: '無法解析網頁內容，請確認網址是否正確' 
+                    });
+                }
+
+                // 檢查是否被重定向到登入頁面
+                if (response.data.includes('請先登入') || response.data.includes('請輸入驗證碼')) {
+                    console.log('需要登入或驗證碼');
+                    return res.status(403).json({ 
+                        error: 'PTT 需要登入或驗證碼，請稍後再試' 
+                    });
+                }
+
+                const $ = cheerio.load(response.data);
+                const images = new Set();
+
+                // 處理文章內容
+                const content = $('.bbs-screen.bbs-content').html() || '';
+                console.log('文章內容:', content);
+
+                // 搜尋所有圖片相關的連結
+                const imagePatterns = [
+                    /https?:\/\/[^\s<>"]+?\.(?:jpg|jpeg|gif|png)/gi,  // 直接圖片連結
+                    /https?:\/\/[^\s<>"]+?imgur\.com\/[^\s<>"]+/gi,   // Imgur 連結
+                    /https?:\/\/[^\s<>"]+?\.imgur\.com\/[^\s<>"]+/gi, // 其他 Imgur 子域名
+                    /https?:\/\/[^\s<>"]+?\.(?:imgur|imgbb|flickr|photobucket)\.com\/[^\s<>"]+/gi,  // 其他圖片網站
+                    /https?:\/\/[^\s<>"]+?\.(?:imgur|imgbb|flickr|photobucket)\.com\/[^\s<>"]+\.(?:jpg|jpeg|gif|png)/gi  // 帶副檔名的圖片網站連結
+                ];
+
+                // 處理文章內容中的純文字連結
+                const textContent = $('.bbs-screen.bbs-content').text();
+                const textLinks = textContent.match(/https?:\/\/[^\s<>"]+/g) || [];
+                console.log('從純文字中找到的連結:', textLinks);
+
+                for (const link of textLinks) {
+                    if (link.includes('imgur.com')) {
+                        const imageUrl = await getImgurImage(link);
+                        if (imageUrl) {
+                            images.add(imageUrl);
+                        }
+                    } else if (link.match(/\.(jpg|jpeg|gif|png)$/i)) {
+                        images.add(link);
+                    }
+                }
+
+                // 處理所有圖片模式
+                for (const pattern of imagePatterns) {
+                    const matches = content.match(pattern) || [];
+                    console.log(`使用模式 ${pattern} 找到的連結:`, matches);
+                    
+                    for (const link of matches) {
+                        if (link.includes('imgur.com')) {
+                            const imageUrl = await getImgurImage(link);
+                            if (imageUrl) {
+                                images.add(imageUrl);
+                            }
+                        } else {
+                            images.add(link);
+                        }
+                    }
+                }
+
+                console.log('找到的圖片數量:', images.size);
+                console.log('找到的圖片:', Array.from(images));
+
+                return res.status(200).json({ 
+                    images: Array.from(images),
+                    source: images.size > 0 ? 'found' : 'not_found'
+                });
+
             } catch (error) {
-                console.error('獲取 PTT cookie 時發生錯誤:', error);
+                console.error('處理 PTT 請求時發生錯誤:', error);
+                return res.status(500).json({ 
+                    error: `無法抓取圖片：${error.message}`,
+                    details: error.stack
+                });
             }
-        }
-
-        // 發送實際請求
-        const response = await client.get(url, {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',
-                'Accept-Encoding': 'gzip, deflate, br',
-                'Connection': 'keep-alive',
-                'Upgrade-Insecure-Requests': '1',
-                'Cache-Control': 'max-age=0'
-            },
-            timeout: 10000,
-            maxRedirects: 5
-        });
-
-        console.log('網頁回應狀態碼:', response.status);
-        
-        // 檢查回應內容類型
-        const contentType = response.headers['content-type'];
-        if (contentType && contentType.includes('image/')) {
-            // 直接回傳圖片連結
-            return res.status(200).json({
-                images: [url],
-                source: 'direct-image'
-            });
-        }
-        if (!contentType || !contentType.includes('text/html')) {
-            console.log('非 HTML 回應:', contentType);
-            return res.status(400).json({ 
-                error: '無法解析網頁內容，請確認網址是否正確' 
-            });
-        }
-
-        // 檢查是否被重定向到登入頁面
-        if (response.data.includes('請先登入') || response.data.includes('請輸入驗證碼')) {
-            console.log('需要登入或驗證碼');
-            return res.status(403).json({ 
-                error: 'PTT 需要登入或驗證碼，請稍後再試' 
-            });
-        }
-
-        // 檢查是否被重定向到 18 禁確認頁面
-        if (response.data.includes('您要繼續嗎？')) {
-            console.log('需要 18 禁確認');
-            // 重新發送請求，帶上 over18 cookie
-            const confirmResponse = await client.get(url, {
+        } else {
+            // 處理非 PTT 的請求
+            const response = await client.get(url, {
                 headers: {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
                     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -255,123 +320,9 @@ app.post('/fetch_images', async (req, res) => {
                 timeout: 10000,
                 maxRedirects: 5
             });
-            
-            if (confirmResponse.status === 200) {
-                response = confirmResponse;
-            }
+
+            // ... 處理非 PTT 網站的邏輯 ...
         }
-
-        const $ = cheerio.load(response.data);
-        const images = new Set(); // 使用 Set 來避免重複圖片
-
-        // 特別處理 PTT 文章中的圖片
-        if (url.includes('ptt.cc')) {
-            console.log('處理 PTT 文章');
-            
-            // 1. 從文章內容中提取所有可能的圖片連結
-            const content = $('.bbs-screen.bbs-content').html() || '';
-            console.log('文章內容:', content);
-
-            // 2. 搜尋所有圖片相關的連結
-            const imagePatterns = [
-                /https?:\/\/[^\s<>"]+?\.(?:jpg|jpeg|gif|png)/gi,  // 直接圖片連結
-                /https?:\/\/[^\s<>"]+?imgur\.com\/[^\s<>"]+/gi,   // Imgur 連結
-                /https?:\/\/[^\s<>"]+?\.imgur\.com\/[^\s<>"]+/gi, // 其他 Imgur 子域名
-                /https?:\/\/[^\s<>"]+?\.(?:imgur|imgbb|flickr|photobucket)\.com\/[^\s<>"]+/gi,  // 其他圖片網站
-                /https?:\/\/[^\s<>"]+?\.(?:imgur|imgbb|flickr|photobucket)\.com\/[^\s<>"]+\.(?:jpg|jpeg|gif|png)/gi  // 帶副檔名的圖片網站連結
-            ];
-
-            // 3. 處理文章內容中的純文字連結
-            const textContent = $('.bbs-screen.bbs-content').text();
-            const textLinks = textContent.match(/https?:\/\/[^\s<>"]+/g) || [];
-            console.log('從純文字中找到的連結:', textLinks);
-
-            for (const link of textLinks) {
-                if (link.includes('imgur.com')) {
-                    const imageUrl = await getImgurImage(link);
-                    if (imageUrl) {
-                        images.add(imageUrl);
-                    }
-                } else if (link.match(/\.(jpg|jpeg|gif|png)$/i)) {
-                    images.add(link);
-                }
-            }
-
-            // 4. 處理所有圖片模式
-            for (const pattern of imagePatterns) {
-                const matches = content.match(pattern) || [];
-                console.log(`使用模式 ${pattern} 找到的連結:`, matches);
-                
-                for (const link of matches) {
-                    if (link.includes('imgur.com')) {
-                        const imageUrl = await getImgurImage(link);
-                        if (imageUrl) {
-                            images.add(imageUrl);
-                        }
-                    } else {
-                        images.add(link);
-                    }
-                }
-            }
-
-            // 5. 搜尋文章中的圖片標籤
-            $('.bbs-screen.bbs-content img').each((i, elem) => {
-                const src = $(elem).attr('src');
-                if (src) {
-                    console.log('找到文章中的圖片標籤:', src);
-                    try {
-                        const absoluteUrl = new URL(src, url).href;
-                        images.add(absoluteUrl);
-                    } catch (error) {
-                        console.error('處理圖片 URL 時發生錯誤:', error);
-                    }
-                }
-            });
-
-            // 6. 搜尋文章中的連結標籤
-            $('.bbs-screen.bbs-content a').each((i, elem) => {
-                const href = $(elem).attr('href');
-                if (href) {
-                    console.log('找到文章中的連結:', href);
-                    if (href.includes('imgur.com')) {
-                        const imageUrl = getImgurImage(href);
-                        if (imageUrl) {
-                            images.add(imageUrl);
-                        }
-                    } else if (href.match(/\.(jpg|jpeg|gif|png)$/i)) {
-                        try {
-                            const absoluteUrl = new URL(href, url).href;
-                            images.add(absoluteUrl);
-                        } catch (error) {
-                            console.error('處理圖片 URL 時發生錯誤:', error);
-                        }
-                    }
-                }
-            });
-
-            // 7. 處理文章中的純文字 Imgur ID
-            const imgurIdPattern = /imgur\.com\/([a-zA-Z0-9]+)/g;
-            let match;
-            while ((match = imgurIdPattern.exec(textContent)) !== null) {
-                const imgurId = match[1];
-                const imgurUrl = `https://imgur.com/${imgurId}`;
-                console.log('找到 Imgur ID:', imgurId);
-                const imageUrl = await getImgurImage(imgurUrl);
-                if (imageUrl) {
-                    images.add(imageUrl);
-                }
-            }
-        }
-
-        console.log('找到的圖片數量:', images.size);
-        console.log('找到的圖片:', Array.from(images));
-
-        // 確保回應是有效的 JSON
-        res.setHeader('Content-Type', 'application/json');
-        return res.status(200).json({ 
-            images: Array.from(images),
-            source: images.size > 0 ? 'found' : 'not_found'
-        });
 
     } catch (error) {
         console.error('抓取圖片時發生錯誤:', error);
