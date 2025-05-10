@@ -244,8 +244,8 @@
     </div>
 
     <script>
-        let currentImages = [];
         let currentImageIndex = 0;
+        let imageUrls = [];
 
         // 模態框相關元素
         const modal = document.getElementById('imageModal');
@@ -286,92 +286,128 @@
 
         async function fetchImages() {
             const urlInput = document.getElementById('urlInput');
-            const loading = document.getElementById('loading');
-            const error = document.getElementById('error');
+            const url = urlInput.value.trim();
+            const loadingDiv = document.getElementById('loading');
             const imageContainer = document.getElementById('imageContainer');
-            debugInfo.textContent = ''; // 清除之前的除錯訊息
+            const errorDiv = document.getElementById('error');
 
-            if (!urlInput.value) {
-                error.textContent = '請輸入網址';
-                error.style.display = 'block';
+            if (!url) {
+                showError('請輸入網址');
                 return;
             }
 
-            // 確保 URL 包含協議
-            let url = urlInput.value;
-            if (!url.startsWith('http://') && !url.startsWith('https://')) {
-                url = 'https://' + url;
-                urlInput.value = url;
-            }
-
-            addDebugInfo('開始處理網址: ' + url);
-            loading.style.display = 'block';
-            error.style.display = 'none';
-            imageContainer.innerHTML = '';
-
             try {
-                addDebugInfo('發送請求到伺服器...');
-                const response = await fetch('/fetch_images', {
-                    method: 'POST',
+                loadingDiv.style.display = 'block';
+                errorDiv.style.display = 'none';
+                imageContainer.innerHTML = '';
+
+                console.log('開始處理網址:', url);
+                
+                // 直接從 PTT 抓取圖片
+                const response = await fetch(url, {
                     headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded',
-                    },
-                    body: `url=${encodeURIComponent(url)}`
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                        'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7'
+                    }
                 });
 
-                addDebugInfo('收到伺服器回應');
-                const data = await response.json();
-                addDebugInfo('回應資料: ' + JSON.stringify(data, null, 2));
-
-                if (response.ok) {
-                    if (data.images.length === 0) {
-                        error.textContent = '未找到任何圖片';
-                        error.style.display = 'block';
-                        addDebugInfo('未找到任何圖片');
-                    } else {
-                        const sourceText = data.source === 'direct' ? '直接圖片連結' : 
-                                        data.source === 'found' ? '從網頁抓取' : '從 Imgur 連結抓取';
-                        const sourceInfo = document.createElement('div');
-                        sourceInfo.className = 'source-info';
-                        sourceInfo.textContent = sourceText;
-                        imageContainer.appendChild(sourceInfo);
-
-                        addDebugInfo('開始顯示圖片，共 ' + data.images.length + ' 張');
-                        currentImages = data.images;
-
-                        // 顯示所有圖片
-                        data.images.forEach((imageUrl, index) => {
-                            addDebugInfo(`處理第 ${index + 1} 張圖片: ${imageUrl}`);
-                            const img = document.createElement('img');
-                            img.src = imageUrl;
-                            img.alt = `圖片 ${index + 1}`;
-                            img.onclick = () => showModal(index);
-                            
-                            img.onload = () => {
-                                addDebugInfo(`圖片載入成功: ${imageUrl}`);
-                            };
-                            
-                            img.onerror = () => {
-                                addDebugInfo(`圖片載入失敗: ${imageUrl}`);
-                                img.style.display = 'none';
-                            };
-                            
-                            imageContainer.appendChild(img);
-                        });
-                    }
-                } else {
-                    error.textContent = data.error || '發生錯誤';
-                    error.style.display = 'block';
-                    addDebugInfo('發生錯誤: ' + (data.error || '未知錯誤'));
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
                 }
-            } catch (err) {
-                error.textContent = '無法連接到伺服器，請確認伺服器是否正在運行';
-                error.style.display = 'block';
-                addDebugInfo('發生錯誤: ' + err.message);
-                console.error('Error:', err);
+
+                const html = await response.text();
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                
+                // 使用正則表達式搜尋所有可能的 imgur 連結
+                const regexPatterns = [
+                    /https?:\/\/i\.imgur\.com\/[a-zA-Z0-9]+/g,
+                    /i\.imgur\.com\/[a-zA-Z0-9]+/g,
+                    /imgur\.com\/[a-zA-Z0-9]+/g,
+                    /\[img\](.*?)\[\/img\]/g,
+                    /https?:\/\/imgur\.com\/[a-zA-Z0-9]+/g,
+                    /\[url=(.*?)\](.*?)\[\/url\]/g,
+                    /\[url\](.*?)\[\/url\]/g,
+                    /https?:\/\/i\.imgur\.com\/[a-zA-Z0-9]+\.(jpg|jpeg|png|gif)/g,
+                    /i\.imgur\.com\/[a-zA-Z0-9]+\.(jpg|jpeg|png|gif)/g
+                ];
+
+                const uniqueImages = new Set();
+
+                // 搜尋文章內容
+                const mainContent = doc.getElementById('main-content');
+                if (mainContent) {
+                    const content = mainContent.textContent;
+                    for (const regex of regexPatterns) {
+                        const matches = content.match(regex);
+                        if (matches) {
+                            matches.forEach(match => {
+                                // 處理 [img] 和 [url] 標籤
+                                if (match.startsWith('[img]')) {
+                                    match = match.replace('[img]', '').replace('[/img]', '');
+                                } else if (match.startsWith('[url=')) {
+                                    match = match.replace(/\[url=(.*?)\]/, '$1').replace('[/url]', '');
+                                } else if (match.startsWith('[url]')) {
+                                    match = match.replace('[url]', '').replace('[/url]', '');
+                                }
+
+                                // 確保 URL 格式正確
+                                if (!match.startsWith('http')) {
+                                    match = 'https://' + match;
+                                }
+
+                                // 移除查詢參數
+                                match = match.split('?')[0];
+
+                                // 如果是 imgur 連結，轉換為直接圖片連結
+                                if (match.includes('imgur.com')) {
+                                    const imageId = match.split('/').pop().split('.')[0];
+                                    const directUrl = `https://i.imgur.com/${imageId}.jpg`;
+                                    uniqueImages.add(directUrl);
+                                }
+                            });
+                        }
+                    }
+                }
+
+                // 搜尋所有圖片標籤
+                const images = doc.getElementsByTagName('img');
+                for (const img of images) {
+                    const src = img.src;
+                    if (src && src.includes('imgur.com')) {
+                        const imageId = src.split('/').pop().split('.')[0];
+                        const directUrl = `https://i.imgur.com/${imageId}.jpg`;
+                        uniqueImages.add(directUrl);
+                    }
+                }
+
+                // 顯示圖片
+                imageUrls = Array.from(uniqueImages);
+                if (imageUrls.length > 0) {
+                    imageUrls.forEach((url, index) => {
+                        const img = document.createElement('img');
+                        img.src = url;
+                        img.alt = `圖片 ${index + 1}`;
+                        img.onclick = () => showModal(index);
+                        imageContainer.appendChild(img);
+                    });
+                } else {
+                    showError('找不到圖片');
+                }
+
+            } catch (error) {
+                console.error('發生錯誤:', error);
+                showError('抓取圖片時發生錯誤：' + error.message);
             } finally {
-                loading.style.display = 'none';
+                loadingDiv.style.display = 'none';
             }
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
         }
 
         function showModal(index) {
@@ -383,16 +419,16 @@
             const nextButton = document.getElementById('nextButton');
             const imageCounter = document.getElementById('imageCounter');
 
-            modalImage.src = currentImages[index];
-            imageInfo.textContent = `圖片網址：${currentImages[index]}`;
+            modalImage.src = imageUrls[index];
+            imageInfo.textContent = `圖片網址：${imageUrls[index]}`;
             modal.style.display = 'block';
 
             // 更新導航按鈕狀態
             prevButton.disabled = index === 0;
-            nextButton.disabled = index === currentImages.length - 1;
+            nextButton.disabled = index === imageUrls.length - 1;
 
             // 更新計數器
-            imageCounter.textContent = `${index + 1} / ${currentImages.length}`;
+            imageCounter.textContent = `${index + 1} / ${imageUrls.length}`;
 
             // 添加鍵盤事件監聽
             document.addEventListener('keydown', handleKeyPress);
@@ -405,7 +441,7 @@
         }
 
         function showNextImage() {
-            if (currentImageIndex < currentImages.length - 1) {
+            if (currentImageIndex < imageUrls.length - 1) {
                 showModal(currentImageIndex + 1);
             }
         }
