@@ -246,6 +246,27 @@ app.post('/fetch_images', async (req, res) => {
             }
         });
 
+        // 特別處理 PTT 文章中的圖片
+        if (url.includes('ptt.cc')) {
+            // 搜尋文章內容中的圖片連結
+            const content = $('.article-metaline + .article-metaline-right + .article-metaline + .bbs-screen.bbs-content').text();
+            const imgurLinks = content.match(/https?:\/\/[^\s<>"]+?\.(?:jpg|jpeg|gif|png)/gi) || [];
+            const imgurUrls = content.match(/https?:\/\/[^\s<>"]+?imgur\.com\/[^\s<>"]+/gi) || [];
+
+            console.log('找到的 imgur 圖片連結:', imgurLinks);
+            console.log('找到的 imgur 網頁連結:', imgurUrls);
+
+            // 處理所有找到的連結
+            for (const link of [...imgurLinks, ...imgurUrls]) {
+                if (link.includes('imgur.com')) {
+                    const imageUrl = await getImgurImage(link);
+                    if (imageUrl) {
+                        images.add(imageUrl);
+                    }
+                }
+            }
+        }
+
         console.log('找到的圖片數量:', images.size);
         console.log('找到的圖片:', Array.from(images));
 
