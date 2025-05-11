@@ -214,11 +214,93 @@
             border-radius: 20px;
             font-size: 14px;
         }
+
+        /* 連線狀態樣式 */
+        .connection-status {
+            margin: 20px 0;
+            padding: 15px;
+            border-radius: 8px;
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+        }
+
+        .status-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .status-title {
+            font-size: 16px;
+            font-weight: bold;
+            color: #495057;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .status-online {
+            background-color: #28a745;
+        }
+
+        .status-offline {
+            background-color: #dc3545;
+        }
+
+        .status-checking {
+            background-color: #ffc107;
+        }
+
+        .status-details {
+            font-size: 14px;
+            color: #6c757d;
+        }
+
+        .check-button {
+            padding: 5px 10px;
+            background-color: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.3s;
+        }
+
+        .check-button:hover {
+            background-color: #5a6268;
+        }
+
+        .status-time {
+            font-size: 12px;
+            color: #adb5bd;
+            margin-top: 5px;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>網頁圖片抓取器</h1>
+        
+        <!-- 連線狀態區域 -->
+        <div class="connection-status">
+            <div class="status-header">
+                <div>
+                    <span class="status-indicator status-checking" id="statusIndicator"></span>
+                    <span class="status-title">伺服器連線狀態</span>
+                </div>
+                <button class="check-button" onclick="checkServerStatus()">檢查連線</button>
+            </div>
+            <div class="status-details" id="statusDetails">正在檢查伺服器狀態...</div>
+            <div class="status-time" id="statusTime"></div>
+        </div>
+
         <div class="input-section">
             <input type="url" id="urlInput" placeholder="請輸入網址 (例如：https://example.com)" required>
             <button onclick="fetchImages()">抓取圖片</button>
@@ -450,6 +532,52 @@
                 fetchImages();
             }
         });
+
+        // 檢查伺服器狀態
+        async function checkServerStatus() {
+            const statusIndicator = document.getElementById('statusIndicator');
+            const statusDetails = document.getElementById('statusDetails');
+            const statusTime = document.getElementById('statusTime');
+            const checkButton = document.querySelector('.check-button');
+
+            // 更新狀態為檢查中
+            statusIndicator.className = 'status-indicator status-checking';
+            statusDetails.textContent = '正在檢查伺服器狀態...';
+            checkButton.disabled = true;
+
+            try {
+                const startTime = Date.now();
+                const response = await fetch('https://ptt-image-grabber.onrender.com/fetch_images', {
+                    method: 'HEAD',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    }
+                });
+
+                const endTime = Date.now();
+                const responseTime = endTime - startTime;
+
+                if (response.ok) {
+                    statusIndicator.className = 'status-indicator status-online';
+                    statusDetails.textContent = `伺服器正常運作中 (回應時間: ${responseTime}ms)`;
+                } else {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+            } catch (error) {
+                statusIndicator.className = 'status-indicator status-offline';
+                statusDetails.textContent = `伺服器連線失敗: ${error.message}`;
+            } finally {
+                const now = new Date();
+                statusTime.textContent = `最後檢查時間: ${now.toLocaleString()}`;
+                checkButton.disabled = false;
+            }
+        }
+
+        // 頁面載入時自動檢查一次狀態
+        window.addEventListener('load', checkServerStatus);
+
+        // 每 5 分鐘自動檢查一次狀態
+        setInterval(checkServerStatus, 5 * 60 * 1000);
     </script>
 </body>
 </html> 
