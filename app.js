@@ -5,9 +5,75 @@ const cors = require('cors');
 const path = require('path');
 const tough = require('tough-cookie');
 const { wrapper } = require('axios-cookiejar-support');
+const HttpsProxyAgent = require('https-proxy-agent');
 
 const app = express();
 const port = process.env.PORT || 3000;
+
+// 代理列表
+let proxyList = [];
+let lastProxyUpdate = 0;
+const PROXY_UPDATE_INTERVAL = 30 * 60 * 1000; // 30 分鐘更新一次
+
+// 獲取免費代理列表
+async function updateProxyList() {
+    try {
+        console.log('開始更新代理列表...');
+        const proxySources = [
+            'https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/http.txt',
+            'https://raw.githubusercontent.com/ShiftyTR/Proxy-List/master/http.txt',
+            'https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/http.txt'
+        ];
+
+        let newProxies = [];
+        for (const source of proxySources) {
+            try {
+                const response = await axios.get(source, { timeout: 10000 });
+                const proxies = response.data.split('\n')
+                    .map(line => line.trim())
+                    .filter(line => line && !line.startsWith('#'));
+                newProxies = newProxies.concat(proxies);
+            } catch (error) {
+                console.error(`從 ${source} 獲取代理失敗:`, error.message);
+            }
+        }
+
+        // 驗證代理
+        const validProxies = [];
+        for (const proxy of newProxies) {
+            try {
+                const httpsAgent = new HttpsProxyAgent(`http://${proxy}`);
+                await axios.get('https://www.ptt.cc', {
+                    httpsAgent,
+                    timeout: 5000,
+                    validateStatus: () => true
+                });
+                validProxies.push(`http://${proxy}`);
+                console.log(`代理 ${proxy} 驗證成功`);
+            } catch (error) {
+                console.log(`代理 ${proxy} 驗證失敗`);
+            }
+        }
+
+        proxyList = validProxies;
+        lastProxyUpdate = Date.now();
+        console.log(`代理列表更新完成，共 ${proxyList.length} 個有效代理`);
+    } catch (error) {
+        console.error('更新代理列表時發生錯誤:', error);
+    }
+}
+
+// 獲取隨機代理
+function getRandomProxy() {
+    if (proxyList.length === 0) {
+        return null;
+    }
+    return proxyList[Math.floor(Math.random() * proxyList.length)];
+}
+
+// 定期更新代理列表
+setInterval(updateProxyList, PROXY_UPDATE_INTERVAL);
+updateProxyList(); // 立即執行一次
 
 // 設定 cookie jar
 const cookieJar = new tough.CookieJar();
@@ -59,12 +125,24 @@ async function getImgurPageImage(imgurUrl) {
             return imgurUrl;
         }
 
-        // 抓取 imgur 網頁
-        const response = await axios.get(imgurUrl, {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-            }
-        });
+        // 使用代理發送請求
+        const proxy = getRandomProxy();
+        if (!proxy) {
+            console.log('沒有可用的代理，使用直接連接');
+            const response = await axios.get(imgurUrl, {
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                }
+            });
+        } else {
+            const httpsAgent = new HttpsProxyAgent(proxy);
+            const response = await axios.get(imgurUrl, {
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                },
+                httpsAgent
+            });
+        }
 
         const $ = cheerio.load(response.data);
         
@@ -190,9 +268,13 @@ app.post('/fetch_images', async (req, res) => {
             try {
                 // 設定重試次數和超時時間
                 const maxRetries = 5;
-                const timeout = 60000; // 增加到 60 秒
+                const timeout = 60000;
                 let retryCount = 0;
                 let response;
+
+                // 使用代理發送請求
+                const proxy = getRandomProxy();
+                const httpsAgent = proxy ? new HttpsProxyAgent(proxy) : null;
 
                 // 先訪問 PTT 首頁獲取必要的 cookie
                 console.log('訪問 PTT 首頁獲取 cookie...');
@@ -215,7 +297,8 @@ app.post('/fetch_images', async (req, res) => {
                         'Sec-Fetch-User': '?1',
                         'DNT': '1'
                     },
-                    timeout: timeout
+                    timeout: timeout,
+                    ...(httpsAgent && { httpsAgent })
                 });
 
                 // 設定 over18 cookie
@@ -269,7 +352,8 @@ app.post('/fetch_images', async (req, res) => {
                                     'Sec-Fetch-User': '?1'
                                 },
                                 timeout: timeout,
-                                maxRedirects: 5
+                                maxRedirects: 5,
+                                ...(httpsAgent && { httpsAgent })
                             });
                         } catch (error) {
                             console.log('HEAD 請求失敗，繼續嘗試 GET 請求');
@@ -305,7 +389,8 @@ app.post('/fetch_images', async (req, res) => {
                             maxRedirects: 5,
                             validateStatus: function (status) {
                                 return status >= 200 && status < 500;
-                            }
+                            },
+                            ...(httpsAgent && { httpsAgent })
                         });
 
                         console.log('網頁回應狀態碼:', response.status);
@@ -393,7 +478,8 @@ app.post('/fetch_images', async (req, res) => {
                                 'Cookie': 'over18=1'
                             },
                             timeout: timeout,
-                            maxRedirects: 5
+                            maxRedirects: 5,
+                            ...(httpsAgent && { httpsAgent })
                         }
                     );
                     
