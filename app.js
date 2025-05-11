@@ -205,7 +205,14 @@ app.post('/fetch_images', async (req, res) => {
                         'Connection': 'keep-alive',
                         'Upgrade-Insecure-Requests': '1',
                         'Cache-Control': 'no-cache',
-                        'Pragma': 'no-cache'
+                        'Pragma': 'no-cache',
+                        'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+                        'Sec-Ch-Ua-Mobile': '?0',
+                        'Sec-Ch-Ua-Platform': '"Windows"',
+                        'Sec-Fetch-Dest': 'document',
+                        'Sec-Fetch-Mode': 'navigate',
+                        'Sec-Fetch-Site': 'none',
+                        'Sec-Fetch-User': '?1'
                     },
                     timeout: timeout
                 });
@@ -215,6 +222,9 @@ app.post('/fetch_images', async (req, res) => {
                     'over18=1; Path=/; Domain=.ptt.cc; Secure; HttpOnly',
                     'https://www.ptt.cc'
                 );
+
+                // 等待一段時間，模擬真實用戶行為
+                await new Promise(resolve => setTimeout(resolve, 2000));
 
                 while (retryCount < maxRetries) {
                     try {
@@ -251,45 +261,22 @@ app.post('/fetch_images', async (req, res) => {
                         console.log('網頁回應狀態碼:', response.status);
                         console.log('回應標頭:', response.headers);
 
+                        // 檢查是否被 Cloudflare 阻擋
+                        if (response.data.includes('Just a moment...') || response.data.includes('Enable JavaScript and cookies to continue')) {
+                            console.log('被 Cloudflare 阻擋，等待後重試...');
+                            retryCount++;
+                            if (retryCount < maxRetries) {
+                                // 等待更長時間
+                                await new Promise(resolve => setTimeout(resolve, 5000));
+                                continue;
+                            } else {
+                                throw new Error('被 Cloudflare 阻擋，請稍後再試');
+                            }
+                        }
+
                         // 如果請求成功，跳出重試迴圈
                         if (response.status === 200) {
                             break;
-                        }
-
-                        // 如果遇到 403 錯誤，嘗試使用不同的 User-Agent
-                        if (response.status === 403) {
-                            console.log('遇到 403 錯誤，嘗試使用不同的 User-Agent');
-                            const userAgents = [
-                                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                                'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/115.0',
-                                'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.5 Safari/605.1.15',
-                                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Edge/120.0.0.0 Safari/537.36'
-                            ];
-                            
-                            for (const userAgent of userAgents) {
-                                try {
-                                    console.log(`嘗試使用 User-Agent: ${userAgent}`);
-                                    response = await client.get(url, {
-                                        headers: {
-                                            ...response.config.headers,
-                                            'User-Agent': userAgent
-                                        },
-                                        timeout: timeout,
-                                        maxRedirects: 5
-                                    });
-                                    
-                                    if (response.status === 200) {
-                                        console.log('使用新的 User-Agent 成功');
-                                        break;
-                                    }
-                                } catch (error) {
-                                    console.error('使用新的 User-Agent 失敗:', error.message);
-                                }
-                            }
-                            
-                            if (response.status === 200) {
-                                break;
-                            }
                         }
 
                         // 如果遇到特定錯誤，直接拋出錯誤
