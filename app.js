@@ -189,8 +189,8 @@ app.post('/fetch_images', async (req, res) => {
         if (url.includes('ptt.cc')) {
             try {
                 // 設定重試次數和超時時間
-                const maxRetries = 3;
-                const timeout = 30000; // 30 秒
+                const maxRetries = 5; // 增加重試次數
+                const timeout = 45000; // 增加超時時間到 45 秒
                 let retryCount = 0;
                 let response;
 
@@ -223,15 +223,16 @@ app.post('/fetch_images', async (req, res) => {
                     'https://www.ptt.cc'
                 );
 
-                // 等待一段時間，模擬真實用戶行為
-                await new Promise(resolve => setTimeout(resolve, 5000));
+                // 等待更長時間，模擬真實用戶行為
+                await new Promise(resolve => setTimeout(resolve, 8000));
 
                 // 定義不同的 User-Agent
                 const userAgents = [
                     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Edge/120.0.0.0 Safari/537.36',
                     'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/115.0',
-                    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.5 Safari/605.1.15'
+                    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.5 Safari/605.1.15',
+                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36'
                 ];
 
                 while (retryCount < maxRetries) {
@@ -265,8 +266,8 @@ app.post('/fetch_images', async (req, res) => {
                             console.log('HEAD 請求失敗，繼續嘗試 GET 請求');
                         }
 
-                        // 等待一段時間
-                        await new Promise(resolve => setTimeout(resolve, 2000));
+                        // 等待更長時間
+                        await new Promise(resolve => setTimeout(resolve, 5000));
 
                         // 2. 發送 GET 請求
                         response = await client.get(url, {
@@ -306,7 +307,7 @@ app.post('/fetch_images', async (req, res) => {
                             retryCount++;
                             if (retryCount < maxRetries) {
                                 // 等待更長時間
-                                await new Promise(resolve => setTimeout(resolve, 10000 * (retryCount + 1)));
+                                await new Promise(resolve => setTimeout(resolve, 15000 * (retryCount + 1)));
                                 continue;
                             } else {
                                 throw new Error('被 Cloudflare 阻擋，請稍後再試');
@@ -326,15 +327,15 @@ app.post('/fetch_images', async (req, res) => {
                         // 其他錯誤，等待後重試
                         retryCount++;
                         if (retryCount < maxRetries) {
-                            console.log(`等待 10 秒後重試...`);
-                            await new Promise(resolve => setTimeout(resolve, 10000));
+                            console.log(`等待 15 秒後重試...`);
+                            await new Promise(resolve => setTimeout(resolve, 15000));
                         }
                     } catch (error) {
                         console.error(`第 ${retryCount + 1} 次請求失敗:`, error.message);
                         retryCount++;
                         if (retryCount < maxRetries) {
-                            console.log(`等待 10 秒後重試...`);
-                            await new Promise(resolve => setTimeout(resolve, 10000));
+                            console.log(`等待 15 秒後重試...`);
+                            await new Promise(resolve => setTimeout(resolve, 15000));
                         } else {
                             throw error;
                         }
