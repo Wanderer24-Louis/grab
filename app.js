@@ -127,7 +127,11 @@ async function getImgurAlbumImages(url) {
 app.get('/fetch_images', async (req, res) => {
     const url = req.query.url;
     if (!url) {
-        return res.status(400).json({ error: '請提供 URL' });
+        return res.status(400).json({ 
+            success: false,
+            error: '請提供 URL',
+            message: 'URL 參數不能為空'
+        });
     }
 
     try {
@@ -142,7 +146,20 @@ app.get('/fetch_images', async (req, res) => {
         if (response.status === 403 || isCloudflareBlocked(response.data)) {
             console.log('檢測到 Cloudflare 保護，等待後重試...');
             await randomDelay(15000, 30000);
-            return res.status(429).json({ error: '請求被限制，請稍後再試' });
+            return res.status(429).json({ 
+                success: false,
+                error: '請求被限制',
+                message: '請稍後再試，或嘗試使用其他網路環境'
+            });
+        }
+
+        if (response.status !== 200) {
+            return res.status(response.status).json({
+                success: false,
+                error: '請求失敗',
+                message: `伺服器回應狀態碼：${response.status}`,
+                status: response.status
+            });
         }
 
         const $ = cheerio.load(response.data);
@@ -173,11 +190,50 @@ app.get('/fetch_images', async (req, res) => {
         });
 
         const images = Array.from(imageUrls);
-        res.json({ images });
+        
+        if (images.length === 0) {
+            return res.status(404).json({
+                success: false,
+                error: '找不到圖片',
+                message: '在文章中未找到任何圖片'
+            });
+        }
+
+        res.json({ 
+            success: true,
+            images,
+            count: images.length,
+            url: url
+        });
     } catch (error) {
         console.error('獲取圖片失敗:', error.message);
-        res.status(500).json({ error: '獲取圖片失敗' });
+        res.status(500).json({ 
+            success: false,
+            error: '獲取圖片失敗',
+            message: error.message,
+            details: error.stack
+        });
     }
+});
+
+// 錯誤處理中間件
+app.use((err, req, res, next) => {
+    console.error('伺服器錯誤:', err);
+    res.status(500).json({
+        success: false,
+        error: '伺服器內部錯誤',
+        message: err.message,
+        details: err.stack
+    });
+});
+
+// 處理 404 錯誤
+app.use((req, res) => {
+    res.status(404).json({
+        success: false,
+        error: '找不到請求的資源',
+        message: '請確認 URL 是否正確'
+    });
 });
 
 // 啟動伺服器
