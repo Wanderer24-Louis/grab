@@ -547,15 +547,20 @@
 
             try {
                 const startTime = Date.now();
-                // 使用簡單的 GET 請求檢查伺服器是否在線
-                const response = await fetch('https://ptt-image-grabber.onrender.com/', {
-                    method: 'GET',
+                // 使用 OPTIONS 請求檢查伺服器是否在線
+                const response = await fetch('https://ptt-image-grabber.onrender.com/fetch_images', {
+                    method: 'OPTIONS',
                     headers: {
-                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                        'Accept': '*/*',
                         'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',
+                        'Access-Control-Request-Method': 'POST',
+                        'Access-Control-Request-Headers': 'content-type',
+                        'Origin': window.location.origin,
                         'Cache-Control': 'no-cache',
                         'Pragma': 'no-cache'
-                    }
+                    },
+                    mode: 'cors',
+                    credentials: 'include'
                 });
 
                 const endTime = Date.now();
@@ -569,7 +574,15 @@
                 }
             } catch (error) {
                 statusIndicator.className = 'status-indicator status-offline';
-                statusDetails.textContent = `伺服器連線失敗: ${error.message}`;
+                let errorMessage = error.message;
+                
+                // 提供更詳細的錯誤訊息
+                if (error.name === 'TypeError' && error.message === 'Failed to fetch') {
+                    errorMessage = '無法連接到伺服器，請檢查：\n1. 網路連線是否正常\n2. 伺服器是否正在維護\n3. 是否被防火牆阻擋';
+                }
+                
+                statusDetails.textContent = `伺服器連線失敗: ${errorMessage}`;
+                console.error('連線檢查錯誤:', error);
             } finally {
                 const now = new Date();
                 statusTime.textContent = `最後檢查時間: ${now.toLocaleString()}`;
@@ -578,7 +591,10 @@
         }
 
         // 頁面載入時自動檢查一次狀態
-        window.addEventListener('load', checkServerStatus);
+        window.addEventListener('load', () => {
+            // 延遲 2 秒後再檢查，確保頁面完全載入
+            setTimeout(checkServerStatus, 2000);
+        });
 
         // 每 5 分鐘自動檢查一次狀態
         setInterval(checkServerStatus, 5 * 60 * 1000);
