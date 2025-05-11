@@ -189,8 +189,8 @@ app.post('/fetch_images', async (req, res) => {
         if (url.includes('ptt.cc')) {
             try {
                 // 設定重試次數和超時時間
-                const maxRetries = 5; // 增加重試次數
-                const timeout = 45000; // 增加超時時間到 45 秒
+                const maxRetries = 5;
+                const timeout = 45000;
                 let retryCount = 0;
                 let response;
 
@@ -212,7 +212,8 @@ app.post('/fetch_images', async (req, res) => {
                         'Sec-Fetch-Dest': 'document',
                         'Sec-Fetch-Mode': 'navigate',
                         'Sec-Fetch-Site': 'none',
-                        'Sec-Fetch-User': '?1'
+                        'Sec-Fetch-User': '?1',
+                        'DNT': '1'
                     },
                     timeout: timeout
                 });
@@ -224,7 +225,7 @@ app.post('/fetch_images', async (req, res) => {
                 );
 
                 // 等待更長時間，模擬真實用戶行為
-                await new Promise(resolve => setTimeout(resolve, 8000));
+                await new Promise(resolve => setTimeout(resolve, 10000));
 
                 // 定義不同的 User-Agent
                 const userAgents = [
@@ -257,7 +258,15 @@ app.post('/fetch_images', async (req, res) => {
                                     'Pragma': 'no-cache',
                                     'Referer': 'https://www.ptt.cc/',
                                     'Origin': 'https://www.ptt.cc',
-                                    'Cookie': 'over18=1'
+                                    'Cookie': 'over18=1',
+                                    'DNT': '1',
+                                    'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+                                    'Sec-Ch-Ua-Mobile': '?0',
+                                    'Sec-Ch-Ua-Platform': '"Windows"',
+                                    'Sec-Fetch-Dest': 'document',
+                                    'Sec-Fetch-Mode': 'navigate',
+                                    'Sec-Fetch-Site': 'same-origin',
+                                    'Sec-Fetch-User': '?1'
                                 },
                                 timeout: timeout,
                                 maxRedirects: 5
@@ -267,7 +276,7 @@ app.post('/fetch_images', async (req, res) => {
                         }
 
                         // 等待更長時間
-                        await new Promise(resolve => setTimeout(resolve, 5000));
+                        await new Promise(resolve => setTimeout(resolve, 8000));
 
                         // 2. 發送 GET 請求
                         response = await client.get(url, {
@@ -289,7 +298,8 @@ app.post('/fetch_images', async (req, res) => {
                                 'Sec-Fetch-Mode': 'navigate',
                                 'Sec-Fetch-Site': 'same-origin',
                                 'Sec-Fetch-User': '?1',
-                                'Cookie': 'over18=1'
+                                'Cookie': 'over18=1',
+                                'DNT': '1'
                             },
                             timeout: timeout,
                             maxRedirects: 5,
@@ -302,12 +312,15 @@ app.post('/fetch_images', async (req, res) => {
                         console.log('回應標頭:', response.headers);
 
                         // 檢查是否被 Cloudflare 阻擋
-                        if (response.data.includes('Just a moment...') || response.data.includes('Enable JavaScript and cookies to continue')) {
+                        if (response.data.includes('Just a moment...') || 
+                            response.data.includes('Enable JavaScript and cookies to continue') ||
+                            response.data.includes('Checking your browser') ||
+                            response.data.includes('Please wait while we verify')) {
                             console.log('被 Cloudflare 阻擋，等待後重試...');
                             retryCount++;
                             if (retryCount < maxRetries) {
                                 // 等待更長時間
-                                await new Promise(resolve => setTimeout(resolve, 15000 * (retryCount + 1)));
+                                await new Promise(resolve => setTimeout(resolve, 20000 * (retryCount + 1)));
                                 continue;
                             } else {
                                 throw new Error('被 Cloudflare 阻擋，請稍後再試');
@@ -327,15 +340,15 @@ app.post('/fetch_images', async (req, res) => {
                         // 其他錯誤，等待後重試
                         retryCount++;
                         if (retryCount < maxRetries) {
-                            console.log(`等待 15 秒後重試...`);
-                            await new Promise(resolve => setTimeout(resolve, 15000));
+                            console.log(`等待 20 秒後重試...`);
+                            await new Promise(resolve => setTimeout(resolve, 20000));
                         }
                     } catch (error) {
                         console.error(`第 ${retryCount + 1} 次請求失敗:`, error.message);
                         retryCount++;
                         if (retryCount < maxRetries) {
-                            console.log(`等待 15 秒後重試...`);
-                            await new Promise(resolve => setTimeout(resolve, 15000));
+                            console.log(`等待 20 秒後重試...`);
+                            await new Promise(resolve => setTimeout(resolve, 20000));
                         } else {
                             throw error;
                         }
