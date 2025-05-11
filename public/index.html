@@ -547,20 +547,14 @@
 
             try {
                 const startTime = Date.now();
-                // 使用 OPTIONS 請求檢查伺服器是否在線
-                const response = await fetch('https://ptt-image-grabber.onrender.com/fetch_images', {
-                    method: 'OPTIONS',
+                // 使用簡單的 GET 請求檢查伺服器是否在線
+                const response = await fetch('https://ptt-image-grabber.onrender.com/', {
+                    method: 'GET',
                     headers: {
-                        'Accept': '*/*',
-                        'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',
-                        'Access-Control-Request-Method': 'POST',
-                        'Access-Control-Request-Headers': 'content-type',
-                        'Origin': window.location.origin,
-                        'Cache-Control': 'no-cache',
-                        'Pragma': 'no-cache'
+                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                        'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7'
                     },
-                    mode: 'cors',
-                    credentials: 'include'
+                    mode: 'cors'
                 });
 
                 const endTime = Date.now();
