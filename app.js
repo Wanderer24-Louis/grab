@@ -308,16 +308,32 @@ app.post('/fetch_images', async (req, res) => {
 
                 // 處理文章內容中的純文字連結
                 const textContent = $('.bbs-screen.bbs-content').text();
-                const textLinks = textContent.match(/https?:\/\/[^\s<>"]+/g) || [];
-                console.log('從純文字中找到的連結:', textLinks);
+                console.log('文章純文字內容:', textContent);
 
-                for (const link of textLinks) {
+                // 搜尋所有可能的連結
+                const allLinks = textContent.match(/https?:\/\/[^\s<>"]+/g) || [];
+                console.log('從純文字中找到的所有連結:', allLinks);
+
+                // 處理所有找到的連結
+                for (const link of allLinks) {
+                    console.log('處理連結:', link);
+                    
+                    // 處理 imgur 連結
                     if (link.includes('imgur.com')) {
                         const imageUrl = await getImgurImage(link);
                         if (imageUrl) {
+                            console.log('找到 imgur 圖片:', imageUrl);
                             images.add(imageUrl);
                         }
-                    } else if (link.match(/\.(jpg|jpeg|gif|png)$/i)) {
+                    }
+                    // 處理直接圖片連結
+                    else if (link.match(/\.(jpg|jpeg|gif|png)$/i)) {
+                        console.log('找到直接圖片連結:', link);
+                        images.add(link);
+                    }
+                    // 處理其他可能的圖片連結
+                    else if (link.match(/\.(imgur|imgbb|flickr|photobucket)\.com/i)) {
+                        console.log('找到其他圖片網站連結:', link);
                         images.add(link);
                     }
                 }
@@ -328,12 +344,15 @@ app.post('/fetch_images', async (req, res) => {
                     console.log(`使用模式 ${pattern} 找到的連結:`, matches);
                     
                     for (const link of matches) {
+                        console.log('處理模式匹配的連結:', link);
                         if (link.includes('imgur.com')) {
                             const imageUrl = await getImgurImage(link);
                             if (imageUrl) {
+                                console.log('找到 imgur 圖片:', imageUrl);
                                 images.add(imageUrl);
                             }
                         } else {
+                            console.log('找到直接圖片連結:', link);
                             images.add(link);
                         }
                     }
@@ -341,15 +360,28 @@ app.post('/fetch_images', async (req, res) => {
 
                 // 特別處理 Baseball 版的圖片
                 if (url.includes('/Baseball/')) {
+                    console.log('處理 Baseball 版文章');
+                    
                     // 搜尋文章中的 imgur 連結
                     const imgurLinks = content.match(/https?:\/\/[^\s<>"]+?imgur\.com\/[^\s<>"]+/gi) || [];
                     console.log('Baseball 版找到的 imgur 連結:', imgurLinks);
                     
                     for (const link of imgurLinks) {
+                        console.log('處理 Baseball 版 imgur 連結:', link);
                         const imageUrl = await getImgurImage(link);
                         if (imageUrl) {
+                            console.log('找到 Baseball 版 imgur 圖片:', imageUrl);
                             images.add(imageUrl);
                         }
+                    }
+
+                    // 搜尋文章中的其他圖片連結
+                    const otherImageLinks = content.match(/https?:\/\/[^\s<>"]+?\.(?:jpg|jpeg|gif|png)/gi) || [];
+                    console.log('Baseball 版找到的其他圖片連結:', otherImageLinks);
+                    
+                    for (const link of otherImageLinks) {
+                        console.log('處理 Baseball 版其他圖片連結:', link);
+                        images.add(link);
                     }
                 }
 
@@ -357,6 +389,7 @@ app.post('/fetch_images', async (req, res) => {
                 console.log('找到的圖片:', Array.from(images));
 
                 if (images.size === 0) {
+                    console.log('未找到任何圖片，返回 404 錯誤');
                     return res.status(404).json({
                         error: '未找到任何圖片',
                         source: 'not_found'
