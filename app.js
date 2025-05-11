@@ -226,14 +226,52 @@ app.post('/fetch_images', async (req, res) => {
                 // 等待一段時間，模擬真實用戶行為
                 await new Promise(resolve => setTimeout(resolve, 5000));
 
+                // 定義不同的 User-Agent
+                const userAgents = [
+                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Edge/120.0.0.0 Safari/537.36',
+                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/115.0',
+                    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.5 Safari/605.1.15'
+                ];
+
                 while (retryCount < maxRetries) {
                     try {
                         console.log(`嘗試第 ${retryCount + 1} 次請求`);
                         
-                        // 1. 直接訪問目標文章，帶上所有必要的標頭
+                        // 使用不同的 User-Agent
+                        const currentUserAgent = userAgents[retryCount % userAgents.length];
+                        console.log('使用 User-Agent:', currentUserAgent);
+
+                        // 1. 先發送 HEAD 請求
+                        try {
+                            await client.head(url, {
+                                headers: {
+                                    'User-Agent': currentUserAgent,
+                                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                                    'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',
+                                    'Accept-Encoding': 'gzip, deflate, br',
+                                    'Connection': 'keep-alive',
+                                    'Upgrade-Insecure-Requests': '1',
+                                    'Cache-Control': 'no-cache',
+                                    'Pragma': 'no-cache',
+                                    'Referer': 'https://www.ptt.cc/',
+                                    'Origin': 'https://www.ptt.cc',
+                                    'Cookie': 'over18=1'
+                                },
+                                timeout: timeout,
+                                maxRedirects: 5
+                            });
+                        } catch (error) {
+                            console.log('HEAD 請求失敗，繼續嘗試 GET 請求');
+                        }
+
+                        // 等待一段時間
+                        await new Promise(resolve => setTimeout(resolve, 2000));
+
+                        // 2. 發送 GET 請求
                         response = await client.get(url, {
                             headers: {
-                                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                                'User-Agent': currentUserAgent,
                                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
                                 'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',
                                 'Accept-Encoding': 'gzip, deflate, br',
