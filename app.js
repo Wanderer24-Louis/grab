@@ -190,7 +190,7 @@ app.post('/fetch_images', async (req, res) => {
             try {
                 // 設定重試次數和超時時間
                 const maxRetries = 3;
-                const timeout = 15000; // 15 秒
+                const timeout = 30000; // 30 秒
                 let retryCount = 0;
                 let response;
 
@@ -306,7 +306,7 @@ app.post('/fetch_images', async (req, res) => {
                             retryCount++;
                             if (retryCount < maxRetries) {
                                 // 等待更長時間
-                                await new Promise(resolve => setTimeout(resolve, 10000));
+                                await new Promise(resolve => setTimeout(resolve, 10000 * (retryCount + 1)));
                                 continue;
                             } else {
                                 throw new Error('被 Cloudflare 阻擋，請稍後再試');
@@ -326,15 +326,15 @@ app.post('/fetch_images', async (req, res) => {
                         // 其他錯誤，等待後重試
                         retryCount++;
                         if (retryCount < maxRetries) {
-                            console.log(`等待 5 秒後重試...`);
-                            await new Promise(resolve => setTimeout(resolve, 5000));
+                            console.log(`等待 10 秒後重試...`);
+                            await new Promise(resolve => setTimeout(resolve, 10000));
                         }
                     } catch (error) {
                         console.error(`第 ${retryCount + 1} 次請求失敗:`, error.message);
                         retryCount++;
                         if (retryCount < maxRetries) {
-                            console.log(`等待 5 秒後重試...`);
-                            await new Promise(resolve => setTimeout(resolve, 5000));
+                            console.log(`等待 10 秒後重試...`);
+                            await new Promise(resolve => setTimeout(resolve, 10000));
                         } else {
                             throw error;
                         }
