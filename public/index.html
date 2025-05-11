@@ -326,8 +326,51 @@
     </div>
 
     <script>
+        // API 基礎 URL
+        const API_BASE_URL = 'https://ptt-image-grabber.onrender.com';
         let currentImageIndex = 0;
         let imageUrls = [];
+
+        // 輔助函數
+        function showLoading() {
+            document.getElementById('loading').style.display = 'block';
+        }
+
+        function hideLoading() {
+            document.getElementById('loading').style.display = 'none';
+        }
+
+        function clearImages() {
+            document.getElementById('imageContainer').innerHTML = '';
+            imageUrls = [];
+        }
+
+        function hideError() {
+            document.getElementById('error').style.display = 'none';
+        }
+
+        function displayImages(images) {
+            const container = document.getElementById('imageContainer');
+            imageUrls = images;
+            
+            images.forEach((url, index) => {
+                const img = document.createElement('img');
+                img.src = url;
+                img.alt = `圖片 ${index + 1}`;
+                img.onclick = () => showModal(index);
+                img.onerror = () => {
+                    console.error('圖片載入失敗:', url);
+                    img.style.display = 'none';
+                };
+                container.appendChild(img);
+            });
+        }
+
+        function updateDebugInfo(title, data) {
+            const debugInfo = document.getElementById('debugInfo');
+            debugInfo.style.display = 'block';
+            debugInfo.textContent = `${title}:\n${JSON.stringify(data, null, 2)}`;
+        }
 
         // 模態框相關元素
         const modal = document.getElementById('imageModal');
