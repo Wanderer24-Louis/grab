@@ -224,7 +224,7 @@ app.post('/fetch_images', async (req, res) => {
                 );
 
                 // 等待一段時間，模擬真實用戶行為
-                await new Promise(resolve => setTimeout(resolve, 2000));
+                await new Promise(resolve => setTimeout(resolve, 5000));
 
                 while (retryCount < maxRetries) {
                     try {
@@ -249,7 +249,8 @@ app.post('/fetch_images', async (req, res) => {
                                 'Sec-Fetch-Dest': 'document',
                                 'Sec-Fetch-Mode': 'navigate',
                                 'Sec-Fetch-Site': 'same-origin',
-                                'Sec-Fetch-User': '?1'
+                                'Sec-Fetch-User': '?1',
+                                'Cookie': 'over18=1'
                             },
                             timeout: timeout,
                             maxRedirects: 5,
@@ -267,7 +268,7 @@ app.post('/fetch_images', async (req, res) => {
                             retryCount++;
                             if (retryCount < maxRetries) {
                                 // 等待更長時間
-                                await new Promise(resolve => setTimeout(resolve, 5000));
+                                await new Promise(resolve => setTimeout(resolve, 10000));
                                 continue;
                             } else {
                                 throw new Error('被 Cloudflare 阻擋，請稍後再試');
@@ -287,15 +288,15 @@ app.post('/fetch_images', async (req, res) => {
                         // 其他錯誤，等待後重試
                         retryCount++;
                         if (retryCount < maxRetries) {
-                            console.log(`等待 2 秒後重試...`);
-                            await new Promise(resolve => setTimeout(resolve, 2000));
+                            console.log(`等待 5 秒後重試...`);
+                            await new Promise(resolve => setTimeout(resolve, 5000));
                         }
                     } catch (error) {
                         console.error(`第 ${retryCount + 1} 次請求失敗:`, error.message);
                         retryCount++;
                         if (retryCount < maxRetries) {
-                            console.log(`等待 2 秒後重試...`);
-                            await new Promise(resolve => setTimeout(resolve, 2000));
+                            console.log(`等待 5 秒後重試...`);
+                            await new Promise(resolve => setTimeout(resolve, 5000));
                         } else {
                             throw error;
                         }
