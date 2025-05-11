@@ -188,37 +188,75 @@ app.post('/fetch_images', async (req, res) => {
         // 處理 PTT 請求
         if (url.includes('ptt.cc')) {
             try {
-                // 1. 直接訪問目標文章，帶上所有必要的標頭
-                let response = await client.get(url, {
-                    headers: {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-                        'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',
-                        'Accept-Encoding': 'gzip, deflate, br',
-                        'Connection': 'keep-alive',
-                        'Upgrade-Insecure-Requests': '1',
-                        'Cache-Control': 'no-cache',
-                        'Pragma': 'no-cache',
-                        'Referer': 'https://www.ptt.cc/',
-                        'Origin': 'https://www.ptt.cc',
-                        'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
-                        'Sec-Ch-Ua-Mobile': '?0',
-                        'Sec-Ch-Ua-Platform': '"Windows"',
-                        'Sec-Fetch-Dest': 'document',
-                        'Sec-Fetch-Mode': 'navigate',
-                        'Sec-Fetch-Site': 'same-origin',
-                        'Sec-Fetch-User': '?1',
-                        'Cookie': 'over18=1'
-                    },
-                    timeout: 10000,
-                    maxRedirects: 5,
-                    validateStatus: function (status) {
-                        return status >= 200 && status < 500;
-                    }
-                });
+                // 設定重試次數和超時時間
+                const maxRetries = 3;
+                const timeout = 15000; // 15 秒
+                let retryCount = 0;
+                let response;
 
-                console.log('網頁回應狀態碼:', response.status);
-                console.log('回應標頭:', response.headers);
+                while (retryCount < maxRetries) {
+                    try {
+                        console.log(`嘗試第 ${retryCount + 1} 次請求`);
+                        
+                        // 1. 直接訪問目標文章，帶上所有必要的標頭
+                        response = await client.get(url, {
+                            headers: {
+                                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+                                'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',
+                                'Accept-Encoding': 'gzip, deflate, br',
+                                'Connection': 'keep-alive',
+                                'Upgrade-Insecure-Requests': '1',
+                                'Cache-Control': 'no-cache',
+                                'Pragma': 'no-cache',
+                                'Referer': 'https://www.ptt.cc/',
+                                'Origin': 'https://www.ptt.cc',
+                                'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+                                'Sec-Ch-Ua-Mobile': '?0',
+                                'Sec-Ch-Ua-Platform': '"Windows"',
+                                'Sec-Fetch-Dest': 'document',
+                                'Sec-Fetch-Mode': 'navigate',
+                                'Sec-Fetch-Site': 'same-origin',
+                                'Sec-Fetch-User': '?1',
+                                'Cookie': 'over18=1'
+                            },
+                            timeout: timeout,
+                            maxRedirects: 5,
+                            validateStatus: function (status) {
+                                return status >= 200 && status < 500;
+                            }
+                        });
+
+                        console.log('網頁回應狀態碼:', response.status);
+                        console.log('回應標頭:', response.headers);
+
+                        // 如果請求成功，跳出重試迴圈
+                        if (response.status === 200) {
+                            break;
+                        }
+
+                        // 如果遇到特定錯誤，直接拋出錯誤
+                        if (response.status === 403 || response.status === 404) {
+                            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                        }
+
+                        // 其他錯誤，等待後重試
+                        retryCount++;
+                        if (retryCount < maxRetries) {
+                            console.log(`等待 2 秒後重試...`);
+                            await new Promise(resolve => setTimeout(resolve, 2000));
+                        }
+                    } catch (error) {
+                        console.error(`第 ${retryCount + 1} 次請求失敗:`, error.message);
+                        retryCount++;
+                        if (retryCount < maxRetries) {
+                            console.log(`等待 2 秒後重試...`);
+                            await new Promise(resolve => setTimeout(resolve, 2000));
+                        } else {
+                            throw error;
+                        }
+                    }
+                }
 
                 // 檢查是否被重定向到 18 禁確認頁面
                 if (response.data.includes('您要繼續嗎？')) {
@@ -257,7 +295,7 @@ app.post('/fetch_images', async (req, res) => {
                                 'Sec-Fetch-User': '?1',
                                 'Cookie': 'over18=1'
                             },
-                            timeout: 10000,
+                            timeout: timeout,
                             maxRedirects: 5
                         }
                     );
