@@ -185,42 +185,7 @@ app.post('/fetch_images', async (req, res) => {
         // 處理 PTT 請求
         if (url.includes('ptt.cc')) {
             try {
-                // 1. 先訪問 PTT 首頁
-                const homeResponse = await client.get('https://www.ptt.cc/bbs/index.html', {
-                    headers: {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-                        'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',
-                        'Accept-Encoding': 'gzip, deflate, br',
-                        'Connection': 'keep-alive',
-                        'Upgrade-Insecure-Requests': '1',
-                        'Cache-Control': 'no-cache',
-                        'Pragma': 'no-cache',
-                        'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
-                        'Sec-Ch-Ua-Mobile': '?0',
-                        'Sec-Ch-Ua-Platform': '"Windows"',
-                        'Sec-Fetch-Dest': 'document',
-                        'Sec-Fetch-Mode': 'navigate',
-                        'Sec-Fetch-Site': 'none',
-                        'Sec-Fetch-User': '?1'
-                    }
-                });
-                console.log('成功訪問 PTT 首頁');
-
-                // 2. 設置 over18 cookie
-                const cookie = new tough.Cookie({
-                    key: 'over18',
-                    value: '1',
-                    domain: 'www.ptt.cc',
-                    path: '/',
-                    secure: true,
-                    sameSite: 'none',
-                    httpOnly: false
-                });
-                await cookieJar.setCookie(cookie, 'https://www.ptt.cc');
-                console.log('設置 over18 cookie');
-
-                // 3. 訪問目標文章
+                // 1. 直接訪問目標文章，帶上所有必要的標頭
                 let response = await client.get(url, {
                     headers: {
                         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -239,7 +204,8 @@ app.post('/fetch_images', async (req, res) => {
                         'Sec-Fetch-Dest': 'document',
                         'Sec-Fetch-Mode': 'navigate',
                         'Sec-Fetch-Site': 'same-origin',
-                        'Sec-Fetch-User': '?1'
+                        'Sec-Fetch-User': '?1',
+                        'Cookie': 'over18=1'
                     },
                     timeout: 10000,
                     maxRedirects: 5,
@@ -285,7 +251,8 @@ app.post('/fetch_images', async (req, res) => {
                                 'Sec-Fetch-Dest': 'document',
                                 'Sec-Fetch-Mode': 'navigate',
                                 'Sec-Fetch-Site': 'same-origin',
-                                'Sec-Fetch-User': '?1'
+                                'Sec-Fetch-User': '?1',
+                                'Cookie': 'over18=1'
                             },
                             timeout: 10000,
                             maxRedirects: 5
@@ -381,30 +348,30 @@ app.post('/fetch_images', async (req, res) => {
                             images.add(imageUrl);
                         }
                     }
-
-                    // 特別處理這個特定的文章
-                    if (url.includes('M.1746348099.A.8C4.html')) {
-                        // 直接添加已知的圖片連結
-                        const knownImages = [
-                            'https://i.imgur.com/123456.jpg',  // 這裡需要替換為實際的圖片連結
-                            'https://i.imgur.com/789012.jpg'   // 這裡需要替換為實際的圖片連結
-                        ];
-                        for (const img of knownImages) {
-                            images.add(img);
-                        }
-                    }
                 }
 
                 console.log('找到的圖片數量:', images.size);
                 console.log('找到的圖片:', Array.from(images));
 
+                if (images.size === 0) {
+                    return res.status(404).json({
+                        error: '未找到任何圖片',
+                        source: 'not_found'
+                    });
+                }
+
                 return res.status(200).json({ 
                     images: Array.from(images),
-                    source: images.size > 0 ? 'found' : 'not_found'
+                    source: 'found'
                 });
 
             } catch (error) {
                 console.error('處理 PTT 請求時發生錯誤:', error);
+                if (error.response) {
+                    console.error('錯誤回應狀態碼:', error.response.status);
+                    console.error('錯誤回應標頭:', error.response.headers);
+                    console.error('錯誤回應內容:', error.response.data);
+                }
                 return res.status(500).json({ 
                     error: `無法抓取圖片：${error.message}`,
                     details: error.stack
