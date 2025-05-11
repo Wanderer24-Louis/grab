@@ -18,9 +18,12 @@ const client = wrapper(axios.create({
 
 // 啟用 CORS，設定允許的來源
 app.use(cors({
-    origin: ['https://wanderer24-louis.github.io', 'http://localhost:3000'],
-    methods: ['GET', 'POST'],
-    credentials: true
+    origin: ['https://wanderer24-louis.github.io', 'http://localhost:3000', 'https://ptt-image-grabber.onrender.com'],
+    methods: ['GET', 'POST', 'OPTIONS'],
+    credentials: true,
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'Cookie'],
+    exposedHeaders: ['Content-Type', 'Authorization'],
+    maxAge: 86400
 }));
 
 // 設定 JSON 解析
