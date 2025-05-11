@@ -392,114 +392,48 @@
         }
 
         async function fetchImages() {
-            const urlInput = document.getElementById('urlInput');
-            const url = urlInput.value.trim();
-            const loadingDiv = document.getElementById('loading');
-            const imageContainer = document.getElementById('imageContainer');
-            const errorDiv = document.getElementById('error');
-            const debugInfo = document.getElementById('debugInfo');
-
+            const url = document.getElementById('urlInput').value.trim();
             if (!url) {
                 showError('請輸入網址');
                 return;
             }
 
+            showLoading();
+            clearImages();
+            hideError();
+
             try {
-                loadingDiv.style.display = 'block';
-                errorDiv.style.display = 'none';
-                imageContainer.innerHTML = '';
-                debugInfo.style.display = 'none';
+                const response = await fetch(`${API_BASE_URL}/fetch_images?url=${encodeURIComponent(url)}`);
+                const data = await response.json();
 
-                console.log('開始處理網址:', url);
-                
-                // 添加重試機制
-                const maxRetries = 3;
-                let retryCount = 0;
-                let response;
-
-                while (retryCount < maxRetries) {
-                    try {
-                        console.log(`嘗試第 ${retryCount + 1} 次請求`);
-                        
-                        response = await fetch('https://ptt-image-grabber.onrender.com/fetch_images', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/x-www-form-urlencoded',
-                                'Accept': 'application/json',
-                                'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7'
-                            },
-                            body: `url=${encodeURIComponent(url)}`,
-                            mode: 'cors'
-                        });
-
-                        // 檢查回應的 Content-Type
-                        const contentType = response.headers.get('content-type');
-                        if (!contentType || !contentType.includes('application/json')) {
-                            throw new Error('伺服器回應格式錯誤');
-                        }
-
-                        const data = await response.json();
-                        
-                        if (!response.ok) {
-                            // 如果是 403 錯誤，等待後重試
-                            if (response.status === 403) {
-                                console.log('遇到 403 錯誤，等待後重試...');
-                                retryCount++;
-                                if (retryCount < maxRetries) {
-                                    await new Promise(resolve => setTimeout(resolve, 5000 * retryCount));
-                                    continue;
-                                }
-                            }
-                            throw new Error(data.error || `HTTP error! status: ${response.status}`);
-                        }
-
-                        if (!data || !data.images) {
-                            throw new Error('無法獲取圖片資料');
-                        }
-
-                        // 顯示圖片
-                        imageUrls = data.images;
-                        if (imageUrls.length > 0) {
-                            imageUrls.forEach((url, index) => {
-                                const img = document.createElement('img');
-                                img.src = url;
-                                img.alt = `圖片 ${index + 1}`;
-                                img.onclick = () => showModal(index);
-                                img.onerror = () => {
-                                    console.error('圖片載入失敗:', url);
-                                    img.style.display = 'none';
-                                };
-                                imageContainer.appendChild(img);
-                            });
-                        } else {
-                            showError('找不到圖片');
-                        }
-
-                        // 如果成功，跳出重試迴圈
-                        break;
-
-                    } catch (error) {
-                        console.error(`第 ${retryCount + 1} 次請求失敗:`, error);
-                        retryCount++;
-                        
-                        if (retryCount < maxRetries) {
-                            console.log(`等待 5 秒後重試...`);
-                            await new Promise(resolve => setTimeout(resolve, 5000));
-                        } else {
-                            throw error;
-                        }
-                    }
+                if (!response.ok) {
+                    throw new Error(data.message || data.error || '獲取圖片失敗');
                 }
 
+                if (!data.success) {
+                    throw new Error(data.message || data.error || '獲取圖片失敗');
+                }
+
+                if (!data.images || data.images.length === 0) {
+                    showError('未找到任何圖片');
+                    return;
+                }
+
+                displayImages(data.images);
+                updateDebugInfo('成功獲取圖片', {
+                    url: url,
+                    count: data.count,
+                    images: data.images
+                });
             } catch (error) {
-                console.error('發生錯誤:', error);
-                showError('抓取圖片時發生錯誤：' + error.message);
-                
-                // 顯示詳細的錯誤資訊
-                debugInfo.style.display = 'block';
-                debugInfo.textContent = `錯誤詳情：\n${error.stack || error.message}`;
+                console.error('獲取圖片失敗:', error);
+                showError(error.message || '獲取圖片失敗');
+                updateDebugInfo('錯誤詳情', {
+                    error: error.message,
+                    stack: error.stack
+                });
             } finally {
-                loadingDiv.style.display = 'none';
+                hideLoading();
             }
         }
 
