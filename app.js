@@ -194,6 +194,28 @@ app.post('/fetch_images', async (req, res) => {
                 let retryCount = 0;
                 let response;
 
+                // 先訪問 PTT 首頁獲取必要的 cookie
+                console.log('訪問 PTT 首頁獲取 cookie...');
+                await client.get('https://www.ptt.cc', {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+                        'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',
+                        'Accept-Encoding': 'gzip, deflate, br',
+                        'Connection': 'keep-alive',
+                        'Upgrade-Insecure-Requests': '1',
+                        'Cache-Control': 'no-cache',
+                        'Pragma': 'no-cache'
+                    },
+                    timeout: timeout
+                });
+
+                // 設定 over18 cookie
+                await cookieJar.setCookie(
+                    'over18=1; Path=/; Domain=.ptt.cc; Secure; HttpOnly',
+                    'https://www.ptt.cc'
+                );
+
                 while (retryCount < maxRetries) {
                     try {
                         console.log(`嘗試第 ${retryCount + 1} 次請求`);
@@ -217,8 +239,7 @@ app.post('/fetch_images', async (req, res) => {
                                 'Sec-Fetch-Dest': 'document',
                                 'Sec-Fetch-Mode': 'navigate',
                                 'Sec-Fetch-Site': 'same-origin',
-                                'Sec-Fetch-User': '?1',
-                                'Cookie': 'over18=1'
+                                'Sec-Fetch-User': '?1'
                             },
                             timeout: timeout,
                             maxRedirects: 5,
@@ -235,8 +256,44 @@ app.post('/fetch_images', async (req, res) => {
                             break;
                         }
 
+                        // 如果遇到 403 錯誤，嘗試使用不同的 User-Agent
+                        if (response.status === 403) {
+                            console.log('遇到 403 錯誤，嘗試使用不同的 User-Agent');
+                            const userAgents = [
+                                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                                'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/115.0',
+                                'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.5 Safari/605.1.15',
+                                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Edge/120.0.0.0 Safari/537.36'
+                            ];
+                            
+                            for (const userAgent of userAgents) {
+                                try {
+                                    console.log(`嘗試使用 User-Agent: ${userAgent}`);
+                                    response = await client.get(url, {
+                                        headers: {
+                                            ...response.config.headers,
+                                            'User-Agent': userAgent
+                                        },
+                                        timeout: timeout,
+                                        maxRedirects: 5
+                                    });
+                                    
+                                    if (response.status === 200) {
+                                        console.log('使用新的 User-Agent 成功');
+                                        break;
+                                    }
+                                } catch (error) {
+                                    console.error('使用新的 User-Agent 失敗:', error.message);
+                                }
+                            }
+                            
+                            if (response.status === 200) {
+                                break;
+                            }
+                        }
+
                         // 如果遇到特定錯誤，直接拋出錯誤
-                        if (response.status === 403 || response.status === 404) {
+                        if (response.status === 404) {
                             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                         }
 
