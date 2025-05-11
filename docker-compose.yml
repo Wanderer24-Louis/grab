@@ -1,0 +1,12 @@
+version: '3'
+services:
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    container_name: flaresolverr
+    environment:
+      - TZ=Asia/Taipei
+      - CAPTCHA_SOLVER=none
+      - LOG_LEVEL=info
+    ports:
+      - "8191:8191"
+    restart: unless-stopped 

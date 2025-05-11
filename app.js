@@ -9,6 +9,10 @@ const { wrapper } = require('axios-cookiejar-support');
 const app = express();
 const port = process.env.PORT || 10000;
 
+// FlareSolverr 設定
+const FLARESOLVERR_URL = process.env.FLARESOLVERR_URL || 'http://localhost:8191/v1';
+const FLARESOLVERR_SESSION = 'ptt_session';
+
 // 設置 CORS
 app.use(cors());
 app.use(express.json());
@@ -25,100 +29,45 @@ const client = wrapper(axios.create({
     }
 }));
 
-// 設置請求標頭
-const headers = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-    'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',
-    'Accept-Encoding': 'gzip, deflate, br',
-    'Connection': 'keep-alive',
-    'Upgrade-Insecure-Requests': '1',
-    'Sec-Fetch-Dest': 'document',
-    'Sec-Fetch-Mode': 'navigate',
-    'Sec-Fetch-Site': 'none',
-    'Sec-Fetch-User': '?1',
-    'Cache-Control': 'max-age=0'
-};
-
-// 隨機延遲函數
-const randomDelay = (min, max) => {
-    const delay = Math.floor(Math.random() * (max - min + 1)) + min;
-    return new Promise(resolve => setTimeout(resolve, delay));
-};
-
-// 檢查是否被 Cloudflare 阻擋
-const isCloudflareBlocked = (data) => {
-    return data.includes('cf-browser-verification') || 
-           data.includes('challenge-platform') ||
-           data.includes('cf_chl_') ||
-           data.includes('cf_clearance');
-};
-
-// 獲取 Imgur 頁面圖片
-async function getImgurPageImage(url) {
+// 使用 FlareSolverr 發送請求
+async function makeRequest(url) {
     try {
-        // 添加隨機延遲
-        await randomDelay(5000, 10000);
-        
-        const response = await client.get(url, { 
-            headers,
+        // 先嘗試使用 FlareSolverr
+        const response = await axios.post(`${FLARESOLVERR_URL}/request`, {
+            cmd: 'request.get',
+            url: url,
+            session: FLARESOLVERR_SESSION,
+            maxTimeout: 60000
+        });
+
+        if (response.data.status === 'success') {
+            return {
+                status: 200,
+                data: response.data.solution.response,
+                headers: response.data.solution.headers
+            };
+        }
+
+        // 如果 FlareSolverr 失敗，嘗試直接請求
+        const directResponse = await client.get(url, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1'
+            },
             timeout: 60000
         });
 
-        if (response.status === 403 || isCloudflareBlocked(response.data)) {
-            console.log('檢測到 Cloudflare 保護，等待後重試...');
-            await randomDelay(15000, 30000);
-            return getImgurPageImage(url);
-        }
-
-        const $ = cheerio.load(response.data);
-        const imageUrl = $('meta[property="og:image"]').attr('content');
-        
-        if (!imageUrl) {
-            throw new Error('找不到圖片 URL');
-        }
-
-        return imageUrl;
+        return {
+            status: directResponse.status,
+            data: directResponse.data,
+            headers: directResponse.headers
+        };
     } catch (error) {
-        console.error('獲取 Imgur 頁面圖片失敗:', error.message);
-        throw error;
-    }
-}
-
-// 獲取 Imgur 相簿圖片
-async function getImgurAlbumImages(url) {
-    try {
-        // 添加隨機延遲
-        await randomDelay(5000, 10000);
-        
-        const response = await client.get(url, { 
-            headers,
-            timeout: 60000
-        });
-
-        if (response.status === 403 || isCloudflareBlocked(response.data)) {
-            console.log('檢測到 Cloudflare 保護，等待後重試...');
-            await randomDelay(15000, 30000);
-            return getImgurAlbumImages(url);
-        }
-
-        const $ = cheerio.load(response.data);
-        const images = [];
-        
-        $('.post-image-container').each((i, elem) => {
-            const imgUrl = $(elem).find('img').attr('src');
-            if (imgUrl) {
-                images.push(imgUrl);
-            }
-        });
-
-        if (images.length === 0) {
-            throw new Error('找不到相簿圖片');
-        }
-
-        return images;
-    } catch (error) {
-        console.error('獲取 Imgur 相簿圖片失敗:', error.message);
+        console.error('請求失敗:', error.message);
         throw error;
     }
 }
@@ -135,24 +84,8 @@ app.get('/fetch_images', async (req, res) => {
     }
 
     try {
-        // 添加隨機延遲
-        await randomDelay(5000, 10000);
+        const response = await makeRequest(url);
         
-        const response = await client.get(url, { 
-            headers,
-            timeout: 60000
-        });
-
-        if (response.status === 403 || isCloudflareBlocked(response.data)) {
-            console.log('檢測到 Cloudflare 保護，等待後重試...');
-            await randomDelay(15000, 30000);
-            return res.status(429).json({ 
-                success: false,
-                error: '請求被限制',
-                message: '請稍後再試，或嘗試使用其他網路環境'
-            });
-        }
-
         if (response.status !== 200) {
             return res.status(response.status).json({
                 success: false,
