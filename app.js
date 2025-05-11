@@ -537,21 +537,148 @@ app.post('/fetch_images', async (req, res) => {
             }
         } else {
             // 處理非 PTT 的請求
-            const response = await client.get(url, {
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                    'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',
-                    'Accept-Encoding': 'gzip, deflate, br',
-                    'Connection': 'keep-alive',
-                    'Upgrade-Insecure-Requests': '1',
-                    'Cache-Control': 'max-age=0'
-                },
-                timeout: 10000,
-                maxRedirects: 5
-            });
+            try {
+                console.log('處理一般網站請求:', url);
+                const response = await client.get(url, {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                        'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',
+                        'Accept-Encoding': 'gzip, deflate, br',
+                        'Connection': 'keep-alive',
+                        'Upgrade-Insecure-Requests': '1',
+                        'Cache-Control': 'no-cache',
+                        'Pragma': 'no-cache'
+                    },
+                    timeout: 30000,
+                    maxRedirects: 5
+                });
 
-            // ... 處理非 PTT 網站的邏輯 ...
+                // 檢查回應內容類型
+                const contentType = response.headers['content-type'];
+                if (contentType && contentType.includes('image/')) {
+                    return res.status(200).json({
+                        images: [url],
+                        source: 'direct-image'
+                    });
+                }
+
+                if (!contentType || !contentType.includes('text/html')) {
+                    console.log('非 HTML 回應:', contentType);
+                    return res.status(400).json({ 
+                        error: '無法解析網頁內容，請確認網址是否正確' 
+                    });
+                }
+
+                const $ = cheerio.load(response.data);
+                const images = new Set();
+
+                // 處理所有圖片標籤
+                $('img').each((i, elem) => {
+                    const src = $(elem).attr('src');
+                    const dataSrc = $(elem).attr('data-src');
+                    const dataOriginal = $(elem).attr('data-original');
+                    const dataLazySrc = $(elem).attr('data-lazy-src');
+                    
+                    if (src) {
+                        const absoluteUrl = new URL(src, url).href;
+                        console.log('找到圖片:', absoluteUrl);
+                        images.add(absoluteUrl);
+                    }
+                    if (dataSrc) {
+                        const absoluteUrl = new URL(dataSrc, url).href;
+                        console.log('找到 data-src 圖片:', absoluteUrl);
+                        images.add(absoluteUrl);
+                    }
+                    if (dataOriginal) {
+                        const absoluteUrl = new URL(dataOriginal, url).href;
+                        console.log('找到 data-original 圖片:', absoluteUrl);
+                        images.add(absoluteUrl);
+                    }
+                    if (dataLazySrc) {
+                        const absoluteUrl = new URL(dataLazySrc, url).href;
+                        console.log('找到 data-lazy-src 圖片:', absoluteUrl);
+                        images.add(absoluteUrl);
+                    }
+                });
+
+                // 處理背景圖片
+                $('[style*="background"]').each((i, elem) => {
+                    const style = $(elem).attr('style');
+                    const matches = style.match(/url\(['"]?([^'"()]+)['"]?\)/g);
+                    if (matches) {
+                        matches.forEach(match => {
+                            const urlMatch = match.match(/url\(['"]?([^'"()]+)['"]?\)/);
+                            if (urlMatch && urlMatch[1]) {
+                                const absoluteUrl = new URL(urlMatch[1], url).href;
+                                console.log('找到背景圖片:', absoluteUrl);
+                                images.add(absoluteUrl);
+                            }
+                        });
+                    }
+                });
+
+                // 處理 meta 標籤中的圖片
+                $('meta[property="og:image"]').each((i, elem) => {
+                    const content = $(elem).attr('content');
+                    if (content) {
+                        const absoluteUrl = new URL(content, url).href;
+                        console.log('找到 meta 圖片:', absoluteUrl);
+                        images.add(absoluteUrl);
+                    }
+                });
+
+                // 處理連結中的圖片
+                $('a').each((i, elem) => {
+                    const href = $(elem).attr('href');
+                    if (href && /\.(jpg|jpeg|png|gif|webp|avif)$/i.test(href)) {
+                        const absoluteUrl = new URL(href, url).href;
+                        console.log('找到連結圖片:', absoluteUrl);
+                        images.add(absoluteUrl);
+                    }
+                });
+
+                // 處理特定網站的圖片
+                if (url.includes('imgur.com')) {
+                    const imageUrl = await getImgurImage(url);
+                    if (imageUrl) {
+                        images.add(imageUrl);
+                    }
+                }
+
+                // 過濾掉無效的圖片 URL
+                const validImages = Array.from(images).filter(imgUrl => {
+                    try {
+                        const url = new URL(imgUrl);
+                        return url.protocol.startsWith('http') && 
+                               /\.(jpg|jpeg|png|gif|webp|avif)$/i.test(url.pathname);
+                    } catch (e) {
+                        return false;
+                    }
+                });
+
+                console.log('找到的圖片數量:', validImages.length);
+                console.log('找到的圖片:', validImages);
+
+                if (validImages.length === 0) {
+                    return res.status(404).json({
+                        error: '未找到任何圖片',
+                        source: 'not_found'
+                    });
+                }
+
+                return res.status(200).json({ 
+                    images: validImages,
+                    source: 'found'
+                });
+
+            } catch (error) {
+                console.error('處理一般網站請求時發生錯誤:', error);
+                return res.status(500).json({ 
+                    error: `無法抓取圖片：${error.message}`,
+                    details: error.stack
+                });
+            }
         }
 
     } catch (error) {
