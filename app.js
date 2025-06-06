@@ -16,6 +16,7 @@ const FLARESOLVERR_SESSION = 'ptt_session';
 // 設置 CORS
 app.use(cors());
 app.use(express.json());
+app.use(express.urlencoded({ extended: true })); // 添加這一行處理 form 數據
 app.use(express.static('public'));
 
 // 創建 axios 實例
@@ -46,7 +47,7 @@ async function makeRequest(url) {
                 data: response.data.solution.response,
                 headers: response.data.solution.headers
             };
-        }
+    }
 
         // 如果 FlareSolverr 失敗，嘗試直接請求
         const directResponse = await client.get(url, {
@@ -73,8 +74,8 @@ async function makeRequest(url) {
 }
 
 // 獲取 PTT 文章圖片
-app.get('/fetch_images', async (req, res) => {
-    const url = req.query.url;
+app.post('/fetch_images', async (req, res) => { // 改為 POST 方法
+    const url = req.body.url; // 從 body 中獲取 url
     if (!url) {
         return res.status(400).json({ 
             success: false,
@@ -119,8 +120,8 @@ app.get('/fetch_images', async (req, res) => {
             const src = $(elem).attr('src');
             if (src && src.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
                 imageUrls.add(src);
-            }
-        });
+                                }
+                            });
 
         const images = Array.from(imageUrls);
         
@@ -172,4 +173,4 @@ app.use((req, res) => {
 // 啟動伺服器
 app.listen(port, () => {
     console.log(`伺服器運行在 http://localhost:${port}`);
-}); 
+});
