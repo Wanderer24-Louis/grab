@@ -9,12 +9,16 @@ on:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
+      with:
+        persist-credentials: false
     
     - name: Setup Node.js
-      uses: actions/setup-node@v2
+      uses: actions/setup-node@v3
       with:
         node-version: '16'
         
@@ -34,3 +38,4 @@ jobs:
         branch: gh-pages
         folder: dist
         clean: true
+        token: ${{ secrets.GITHUB_TOKEN }}
