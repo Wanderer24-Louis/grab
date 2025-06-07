@@ -7,54 +7,30 @@ on:
     branches: [ main ]
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
-
-    strategy:
-      matrix:
-        node-version: [14.x, 16.x, 18.x]
-
+    
     steps:
     - uses: actions/checkout@v2
     
-    - name: Use Node.js ${{ matrix.node-version }}
+    - name: Setup Node.js
       uses: actions/setup-node@v2
       with:
-        node-version: ${{ matrix.node-version }}
+        node-version: '16'
         
-    - name: Install dependencies
-      run: npm ci
-      
-    - name: Run tests
-      run: npm test
-      if: ${{ false }}  # 暫時關閉測試，直到添加測試檔案
+    - name: Install Dependencies
+      run: npm install
       
     - name: Build
-      run: npm run build
-      if: ${{ false }}  # 暫時關閉建置，直到添加建置腳本
-
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v2
-        with:
-          node-version: '16'
-          
-      - name: Install Dependencies
-        run: npm install
+      run: |
+        mkdir -p dist
+        cp -r public/* dist/
+        cp server.js dist/
+        cp package.json dist/
         
-      - name: Build
-        run: |
-          mkdir -p dist
-          cp -r public/* dist/
-          cp server.js dist/
-          cp package.json dist/
-          
-      - name: Deploy to GitHub Pages
-        uses: JamesIves/github-pages-deploy-action@4.1.4
-        with:
-          branch: gh-pages
-          folder: dist 
+    - name: Deploy to GitHub Pages
+      uses: JamesIves/github-pages-deploy-action@v4.4.1
+      with:
+        branch: gh-pages
+        folder: dist
+        clean: true
