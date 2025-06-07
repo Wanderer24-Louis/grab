@@ -6,21 +6,29 @@ on:
   pull_request:
     branches: [ main ]
 
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     
     steps:
-    - uses: actions/checkout@v3
+    - name: Checkout
+      uses: actions/checkout@v3
       with:
-        persist-credentials: false
+        fetch-depth: 0
     
     - name: Setup Node.js
       uses: actions/setup-node@v3
       with:
         node-version: '16'
+        cache: 'npm'
         
     - name: Install Dependencies
       run: npm install
@@ -32,8 +40,17 @@ jobs:
         cp server.js dist/
         cp package.json dist/
         
+    - name: Setup Pages
+      uses: actions/configure-pages@v3
+
+    - name: Upload artifact
+      uses: actions/upload-pages-artifact@v2
+      with:
+        path: dist
+
     - name: Deploy to GitHub Pages
-      uses: JamesIves/github-pages-deploy-action@v4.4.1
+      id: deployment
+      uses: actions/deploy-pages@v2
       with:
         branch: gh-pages
         folder: dist
