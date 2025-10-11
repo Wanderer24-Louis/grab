@@ -303,6 +303,7 @@
 
         <div class="input-section">
             <input type="url" id="urlInput" placeholder="請輸入網址 (例如：https://example.com)" required>
+            <input type="password" id="apiKeyInput" placeholder="API密鑰 (可選)" value="IOnREPkNgH5O3QkuJyTZo2UujCdPDLlOfiSQZeY57B" style="width: 200px;">
             <button onclick="fetchImages()">抓取圖片</button>
         </div>
         <div id="loading" class="loading" style="display: none;">載入中...</div>
@@ -427,14 +428,26 @@
                     try {
                         console.log(`嘗試第 ${retryCount + 1} 次請求`);
                         
+                        const apiKey = document.getElementById('apiKeyInput').value.trim();
+                        const headers = {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                            'Accept': 'application/json',
+                            'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7'
+                        };
+                        
+                        // 如果有API密鑰，添加到請求中
+                        if (apiKey) {
+                            headers['X-API-Key'] = apiKey;
+                        }
+                        
+                        const bodyData = apiKey ? 
+                            `url=${encodeURIComponent(url)}&apiKey=${encodeURIComponent(apiKey)}` :
+                            `url=${encodeURIComponent(url)}`;
+                        
                         response = await fetch('https://ptt-image-grabber.onrender.com/fetch_images', {
                             method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/x-www-form-urlencoded',
-                                'Accept': 'application/json',
-                                'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7'
-                            },
-                            body: `url=${encodeURIComponent(url)}`,
+                            headers: headers,
+                            body: bodyData,
                             mode: 'cors'
                         });
 
