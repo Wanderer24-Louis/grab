@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: ptt-image-grabber
+    env: node
+    buildCommand: npm install
+    startCommand: node app.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: API_KEY
+        value: IOnREPkNgH5O3QkuJyTZo2UujCdPDLlOfiSQZeY57B
+      - key: FLARESOLVERR_URL
+        value: https://flaresolverr.onrender.com/v1
+    healthCheckPath: /health
+    autoDeploy: true 
