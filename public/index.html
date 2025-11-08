@@ -453,14 +453,46 @@
 
                         // 檢查回應的 Content-Type
                         const contentType = response.headers.get('content-type');
-                        if (!contentType || !contentType.includes('application/json')) {
-                            throw new Error('伺服器回應格式錯誤');
+                        let data;
+                        
+                        try {
+                            if (contentType && contentType.includes('application/json')) {
+                                data = await response.json();
+                            } else {
+                                // 如果不是 JSON，先克隆響應再讀取文本（避免消耗響應體）
+                                const clonedResponse = response.clone();
+                                const text = await clonedResponse.text();
+                                console.error('非 JSON 回應:', text);
+                                throw new Error(`伺服器回應格式錯誤 (${response.status}): ${text.substring(0, 200)}`);
+                            }
+                        } catch (parseError) {
+                            if (parseError.message.includes('伺服器回應格式錯誤')) {
+                                throw parseError;
+                            }
+                            // JSON 解析失敗，嘗試讀取原始文本
+                            try {
+                                const clonedResponse = response.clone();
+                                const text = await clonedResponse.text();
+                                console.error('JSON 解析失敗，原始回應:', text.substring(0, 500));
+                                throw new Error(`無法解析伺服器回應 (${response.status}): ${text.substring(0, 200)}`);
+                            } catch (textError) {
+                                throw new Error(`無法解析伺服器回應 (${response.status})`);
+                            }
                         }
-
-                        const data = await response.json();
                         
                         if (!response.ok) {
-                            // 如果是 403 錯誤，等待後重試
+                            // 構建詳細的錯誤訊息
+                            let errorMessage = `HTTP ${response.status} 錯誤`;
+                            if (data) {
+                                if (data.error) {
+                                    errorMessage = data.error;
+                                }
+                                if (data.message) {
+                                    errorMessage += ': ' + data.message;
+                                }
+                            }
+                            
+                            // 如果是 403 錯誤（API 密鑰錯誤），等待後重試
                             if (response.status === 403) {
                                 console.log('遇到 403 錯誤，等待後重試...');
                                 retryCount++;
@@ -469,7 +501,13 @@
                                     continue;
                                 }
                             }
-                            throw new Error(data.error || `HTTP error! status: ${response.status}`);
+                            
+                            // 如果是 401 錯誤（缺少 API 密鑰）
+                            if (response.status === 401) {
+                                errorMessage = '缺少 API 密鑰，請在輸入框中輸入 API 密鑰';
+                            }
+                            
+                            throw new Error(errorMessage);
                         }
 
                         if (!data || !data.images) {
@@ -499,6 +537,17 @@
 
                     } catch (error) {
                         console.error(`第 ${retryCount + 1} 次請求失敗:`, error);
+                        
+                        // 如果是網路錯誤，直接重試
+                        if (error.name === 'TypeError' && error.message.includes('fetch')) {
+                            console.log('網路連線錯誤，等待後重試...');
+                            retryCount++;
+                            if (retryCount < maxRetries) {
+                                await new Promise(resolve => setTimeout(resolve, 5000));
+                                continue;
+                            }
+                        }
+                        
                         retryCount++;
                         
                         if (retryCount < maxRetries) {
@@ -512,11 +561,32 @@
 
             } catch (error) {
                 console.error('發生錯誤:', error);
-                showError('抓取圖片時發生錯誤：' + error.message);
+                
+                // 構建更友好的錯誤訊息
+                let errorMessage = error.message || '未知錯誤';
+                
+                // 處理常見錯誤
+                if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+                    errorMessage = '無法連接到伺服器，請檢查：\n1. 網路連線是否正常\n2. 伺服器是否正在運行\n3. 是否被防火牆阻擋';
+                } else if (error.message.includes('缺少 API 密鑰')) {
+                    errorMessage = '缺少 API 密鑰，請在輸入框中輸入 API 密鑰';
+                } else if (error.message.includes('無效的API密鑰')) {
+                    errorMessage = 'API 密鑰不正確，請檢查輸入的 API 密鑰';
+                } else if (error.message.includes('找不到圖片')) {
+                    errorMessage = '在該網頁中未找到任何圖片';
+                }
+                
+                showError('抓取圖片時發生錯誤：' + errorMessage);
                 
                 // 顯示詳細的錯誤資訊
                 debugInfo.style.display = 'block';
-                debugInfo.textContent = `錯誤詳情：\n${error.stack || error.message}`;
+                debugInfo.textContent = `錯誤詳情：\n${error.message}\n\n堆疊追蹤：\n${error.stack || '無'}`;
+                
+                // 清除舊的重試按鈕（如果有的話）
+                const oldRetryButton = errorDiv.querySelector('button');
+                if (oldRetryButton) {
+                    oldRetryButton.remove();
+                }
                 
                 // 添加重試按鈕
                 const retryButton = document.createElement('button');
