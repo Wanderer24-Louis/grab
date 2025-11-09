@@ -187,8 +187,18 @@ async function makeRequest(url) {
                 console.log('PTT 首頁訪問失敗，繼續嘗試:', error.message);
             }
             
-            // 設置 PTT 需要的 Cookie
-            await jar.setCookie('over18=1', 'https://www.ptt.cc');
+            // 設置 PTT 需要的 Cookie (over18=1 確認已滿18歲)
+            const Cookie = require('tough-cookie').Cookie;
+            const cookie = new Cookie({
+                key: 'over18',
+                value: '1',
+                domain: 'www.ptt.cc',
+                path: '/',
+                httpOnly: false,
+                secure: true
+            });
+            await jar.setCookie(cookie, 'https://www.ptt.cc');
+            console.log('PTT Cookie (over18=1) 已設置');
         }
         
         const directResponse = await client.get(url, {
