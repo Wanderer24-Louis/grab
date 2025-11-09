@@ -483,21 +483,23 @@
                                 }
                             }
                             
-                            // 如果是 403 錯誤（API 密鑰錯誤），等待後重試
+                            // 如果是 403 錯誤，可能是目標網站拒絕訪問，不需要重試
                             if (response.status === 403) {
-                                console.log('遇到 403 錯誤，等待後重試...');
-                                retryCount++;
-                                if (retryCount < maxRetries) {
-                                    await new Promise(resolve => setTimeout(resolve, 5000 * retryCount));
-                                    continue;
-                                }
+                                console.log('遇到 403 錯誤，目標網站可能拒絕訪問');
+                                // 不再重試，直接顯示錯誤
                             }
                             
                             
                             throw new Error(errorMessage);
                         }
 
-                        if (!data || !data.images) {
+                        // 檢查是否成功
+                        if (!data || data.success === false) {
+                            const errorMsg = data?.error || data?.message || '無法獲取圖片資料';
+                            throw new Error(errorMsg);
+                        }
+
+                        if (!data.images) {
                             throw new Error('無法獲取圖片資料');
                         }
 

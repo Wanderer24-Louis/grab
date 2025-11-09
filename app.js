@@ -157,12 +157,23 @@ app.post('/fetch_images', async (req, res) => {
         const response = await makeRequest(url);
         
         if (response.status !== 200) {
-            console.error(`請求失敗，狀態碼: ${response.status}`);
-            return res.status(response.status).json({
+            console.error(`請求目標網站失敗，狀態碼: ${response.status}`);
+            // 如果是 403，說明目標網站拒絕了請求，不是我們的服務器問題
+            if (response.status === 403) {
+                return res.status(200).json({
+                    success: false,
+                    error: '目標網站拒絕訪問',
+                    message: '目標網站返回 403 錯誤，可能是因為：\n1. 網站有反爬蟲保護\n2. 需要登入才能訪問\n3. IP 被限制訪問',
+                    status: response.status,
+                    images: []
+                });
+            }
+            return res.status(200).json({
                 success: false,
-                error: '請求失敗',
-                message: `伺服器回應狀態碼：${response.status}`,
-                status: response.status
+                error: '請求目標網站失敗',
+                message: `目標網站回應狀態碼：${response.status}`,
+                status: response.status,
+                images: []
             });
         }
 
