@@ -89,49 +89,74 @@ async function makeRequest(url) {
                 cmd: 'request.get',
                 url: url,
                 session: FLARESOLVERR_SESSION,
-                maxTimeout: 60000
+                maxTimeout: 60000,
+                returnOnlyCookies: false
             }, {
-                timeout: 65000
+                timeout: 90000  // 增加超時時間，因為 FlareSolverr 需要時間處理
             });
 
             if (response.data && response.data.status === 'success') {
                 console.log('FlareSolverr 請求成功');
+                const solution = response.data.solution;
                 return {
-                    status: 200,
-                    data: response.data.solution.response,
-                    headers: response.data.solution.headers
+                    status: solution.status || 200,
+                    data: solution.response,
+                    headers: solution.headers || {}
                 };
             } else {
-                console.log('FlareSolverr 返回非成功狀態，回退到直接請求');
+                console.log('FlareSolverr 返回非成功狀態:', response.data);
+                // 如果 FlareSolverr 失敗，繼續嘗試直接請求
             }
         } catch (error) {
-            console.log(`FlareSolverr 請求失敗，回退到直接請求: ${error.message}`);
+            console.log(`FlareSolverr 請求失敗: ${error.message}`);
+            if (error.response) {
+                console.log('FlareSolverr 回應:', error.response.data);
+            }
+            // 繼續嘗試直接請求
         }
     }
 
-    // 如果 FlareSolverr 失敗或未配置，嘗試直接請求
+    // 如果 FlareSolverr 失敗或未配置，嘗試直接請求（使用更完整的瀏覽器標頭）
     try {
         console.log(`直接請求: ${url}`);
+        const urlObj = new URL(url);
         const directResponse = await client.get(url, {
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
                 'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',
                 'Accept-Encoding': 'gzip, deflate, br',
                 'Connection': 'keep-alive',
                 'Upgrade-Insecure-Requests': '1',
-                'Referer': new URL(url).origin
+                'Sec-Fetch-Dest': 'document',
+                'Sec-Fetch-Mode': 'navigate',
+                'Sec-Fetch-Site': 'none',
+                'Sec-Fetch-User': '?1',
+                'Cache-Control': 'max-age=0',
+                'Referer': urlObj.origin,
+                'DNT': '1'
             },
-            timeout: 60000
+            timeout: 60000,
+            maxRedirects: 10,
+            validateStatus: function (status) {
+                // 接受所有狀態碼，讓我們自己處理
+                return true;
+            }
         });
 
+        console.log(`直接請求回應狀態碼: ${directResponse.status}`);
+        
         return {
             status: directResponse.status,
             data: directResponse.data,
             headers: directResponse.headers
         };
     } catch (error) {
-        console.error('直接請求也失敗:', error.message);
+        console.error('直接請求失敗:', error.message);
+        if (error.response) {
+            console.error('回應狀態碼:', error.response.status);
+            console.error('回應標頭:', error.response.headers);
+        }
         throw error;
     }
 }

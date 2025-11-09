@@ -557,6 +557,8 @@
                 // 處理常見錯誤
                 if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
                     errorMessage = '無法連接到伺服器，請檢查：\n1. 網路連線是否正常\n2. 伺服器是否正在運行\n3. 是否被防火牆阻擋';
+                } else if (error.message.includes('目標網站拒絕訪問') || error.message.includes('目標網站')) {
+                    errorMessage = '目標網站拒絕訪問\n\n可能的原因：\n1. 網站有反爬蟲保護（如 Cloudflare）\n2. 需要登入才能訪問\n3. IP 被限制訪問\n4. 網站檢測到自動化請求\n\n建議：\n• 如果網站使用 Cloudflare，請確保 FlareSolverr 服務正常運行\n• 嘗試訪問其他網站測試\n• 檢查目標網站是否需要特殊權限';
                 } else if (error.message.includes('找不到圖片')) {
                     errorMessage = '在該網頁中未找到任何圖片';
                 }
