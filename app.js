@@ -91,7 +91,8 @@ async function makeRequest(url) {
     if (FLARESOLVERR_URL && FLARESOLVERR_URL !== 'http://localhost:8191/v1') {
         try {
             console.log(`嘗試使用 FlareSolverr 請求: ${url}`);
-            const flaresolverrUrl = `${FLARESOLVERR_URL}/request`;
+            // FlareSolverr 的 API 端點就是 /v1，不需要再加 /request
+            const flaresolverrUrl = FLARESOLVERR_URL;
             console.log(`FlareSolverr 完整 URL: ${flaresolverrUrl}`);
             
             const response = await axios.post(flaresolverrUrl, {
