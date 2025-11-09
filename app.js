@@ -128,8 +128,18 @@ async function makeRequest(url) {
             if (error.response) {
                 console.log('FlareSolverr 回應狀態:', error.response.status);
                 console.log('FlareSolverr 回應數據:', JSON.stringify(error.response.data).substring(0, 500));
+                
+                // 如果是 404，说明服务不存在
+                if (error.response.status === 404) {
+                    console.error('⚠️ FlareSolverr 服務不存在或未部署！');
+                    console.error('   請確認 FlareSolverr 服務已正確部署在: ' + FLARESOLVERR_URL);
+                    console.error('   或者移除 FLARESOLVERR_URL 環境變量以跳過 FlareSolverr');
+                }
             } else if (error.request) {
                 console.log('FlareSolverr 請求發送但無回應，可能是服務不可用');
+                console.error('⚠️ 無法連接到 FlareSolverr 服務: ' + FLARESOLVERR_URL);
+            } else {
+                console.error('⚠️ FlareSolverr 請求錯誤:', error.message);
             }
             // 繼續嘗試直接請求
         }
@@ -216,10 +226,19 @@ app.post('/fetch_images', async (req, res) => {
             console.error(`請求目標網站失敗，狀態碼: ${response.status}`);
             // 如果是 403，說明目標網站拒絕了請求，不是我們的服務器問題
             if (response.status === 403) {
+                let message = '目標網站返回 403 錯誤，可能是因為：\n1. 網站有反爬蟲保護（如 Cloudflare）\n2. 需要登入才能訪問\n3. IP 被限制訪問\n\n';
+                
+                // 檢查是否配置了 FlareSolverr
+                if (FLARESOLVERR_URL && FLARESOLVERR_URL !== 'http://localhost:8191/v1') {
+                    message += '💡 提示：已配置 FlareSolverr，但可能服務不可用。\n請檢查 FlareSolverr 服務是否正常運行。';
+                } else {
+                    message += '💡 提示：建議配置 FlareSolverr 來繞過反爬蟲保護。\n設置環境變量 FLARESOLVERR_URL 指向您的 FlareSolverr 服務。';
+                }
+                
                 return res.status(200).json({
                     success: false,
                     error: '目標網站拒絕訪問',
-                    message: '目標網站返回 403 錯誤，可能是因為：\n1. 網站有反爬蟲保護\n2. 需要登入才能訪問\n3. IP 被限制訪問',
+                    message: message,
                     status: response.status,
                     images: []
                 });
