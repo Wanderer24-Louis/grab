@@ -281,8 +281,47 @@ app.post('/fetch_images', async (req, res) => {
         console.log('成功獲取網頁內容，開始解析圖片');
         const $ = cheerio.load(response.data);
         const imageUrls = new Set();
+        const isPTT = url.includes('ptt.cc');
 
-        // 處理所有圖片連結（<a> 標籤）
+        // 根據 PTT 文章教程，主要從 <img> 標籤的 src 屬性提取圖片
+        // 處理所有圖片標籤（<img> 標籤）- 這是主要方法
+        $('img').each((i, elem) => {
+            // 檢查多個可能的屬性（src, data-src, data-lazy-src, data-original）
+            const src = $(elem).attr('src') || $(elem).attr('data-src') || $(elem).attr('data-lazy-src') || $(elem).attr('data-original');
+            if (src) {
+                try {
+                    // 過濾掉 data URI 和 base64 圖片（太大，不適合下載）
+                    if (src.startsWith('data:') || src.startsWith('blob:')) {
+                        return;
+                    }
+                    
+                    // 將相對路徑轉換為絕對路徑
+                    let absoluteUrl = resolveUrl(url, src);
+                    
+                    // 處理 Imgur 連結（PTT 常用）
+                    if (absoluteUrl.includes('imgur.com')) {
+                        absoluteUrl = processImgurUrl(absoluteUrl);
+                        imageUrls.add(absoluteUrl);
+                        console.log(`找到 Imgur 圖片: ${absoluteUrl}`);
+                    }
+                    // 處理直接圖片連結
+                    else if (absoluteUrl.match(/\.(jpg|jpeg|png|gif|webp|bmp)$/i)) {
+                        imageUrls.add(absoluteUrl);
+                        console.log(`找到圖片: ${absoluteUrl}`);
+                    }
+                    // PTT 可能使用其他圖片服務
+                    else if (isPTT && (absoluteUrl.includes('i.imgur.com') || absoluteUrl.includes('imgur.com'))) {
+                        absoluteUrl = processImgurUrl(absoluteUrl);
+                        imageUrls.add(absoluteUrl);
+                        console.log(`找到 PTT 圖片: ${absoluteUrl}`);
+                    }
+                } catch (error) {
+                    console.error(`處理圖片標籤失敗: ${src}`, error.message);
+                }
+            }
+        });
+
+        // 處理所有圖片連結（<a> 標籤）- 作為補充
         $('a').each((i, elem) => {
             const href = $(elem).attr('href');
             if (href) {
@@ -293,43 +332,15 @@ app.post('/fetch_images', async (req, res) => {
                     if (absoluteUrl.includes('imgur.com')) {
                         absoluteUrl = processImgurUrl(absoluteUrl);
                         imageUrls.add(absoluteUrl);
+                        console.log(`找到連結中的 Imgur 圖片: ${absoluteUrl}`);
                     } 
                     // 處理直接圖片連結
                     else if (absoluteUrl.match(/\.(jpg|jpeg|png|gif|webp|bmp)$/i)) {
                         imageUrls.add(absoluteUrl);
+                        console.log(`找到連結中的圖片: ${absoluteUrl}`);
                     }
                 } catch (error) {
                     console.error(`處理連結失敗: ${href}`, error.message);
-                }
-            }
-        });
-
-        // 處理所有圖片標籤（<img> 標籤）
-        $('img').each((i, elem) => {
-            // 檢查多個可能的屬性
-            const src = $(elem).attr('src') || $(elem).attr('data-src') || $(elem).attr('data-lazy-src') || $(elem).attr('data-original');
-            if (src) {
-                try {
-                    // 過濾掉 data URI 和 base64 圖片（太大）
-                    if (src.startsWith('data:')) {
-                        return;
-                    }
-                    
-                    let absoluteUrl = resolveUrl(url, src);
-                    
-                    // 處理 Imgur 連結
-                    if (absoluteUrl.includes('imgur.com')) {
-                        absoluteUrl = processImgurUrl(absoluteUrl);
-                        imageUrls.add(absoluteUrl);
-                    }
-                    // 處理直接圖片連結
-                    else if (absoluteUrl.match(/\.(jpg|jpeg|png|gif|webp|bmp)$/i) || 
-                             absoluteUrl.includes('imgur.com') ||
-                             absoluteUrl.includes('i.imgur.com')) {
-                        imageUrls.add(absoluteUrl);
-                    }
-                } catch (error) {
-                    console.error(`處理圖片標籤失敗: ${src}`, error.message);
                 }
             }
         });
