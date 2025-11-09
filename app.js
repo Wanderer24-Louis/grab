@@ -23,26 +23,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true })); // 添加這一行處理 form 數據
 app.use(express.static('public'));
 
-// API 密鑰驗證中間件（可選，如果提供了API密鑰則驗證，否則跳過）
-const validateApiKey = (req, res, next) => {
-    const providedKey = req.headers['x-api-key'] || req.body.apiKey || req.query.apiKey;
-    
-    // 如果沒有提供API密鑰，直接通過（允許公開訪問）
-    if (!providedKey) {
-        return next();
-    }
-    
-    // 如果提供了API密鑰，則驗證
-    if (providedKey !== API_KEY) {
-        return res.status(403).json({
-            success: false,
-            error: '無效的API密鑰',
-            message: '提供的API密鑰不正確'
-        });
-    }
-    
-    next();
-};
+// 移除 API 密鑰驗證，允許公開訪問
 
 // 根路徑（不需要API密鑰）
 app.get('/', (req, res) => {
@@ -155,10 +136,15 @@ async function makeRequest(url) {
     }
 }
 
-// 獲取 PTT 文章圖片
-app.post('/fetch_images', validateApiKey, async (req, res) => { // 改為 POST 方法
+// 獲取 PTT 文章圖片（公開訪問，無需API密鑰）
+app.post('/fetch_images', async (req, res) => {
+    console.log('收到圖片抓取請求');
+    console.log('請求體:', req.body);
+    console.log('請求頭:', req.headers);
+    
     const url = req.body.url; // 從 body 中獲取 url
     if (!url) {
+        console.log('缺少 URL 參數');
         return res.status(400).json({ 
             success: false,
             error: '請提供 URL',
