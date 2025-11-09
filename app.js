@@ -170,9 +170,25 @@ async function makeRequest(url) {
             'DNT': '1'
         };
         
-        // PTT 可能需要額外的標頭
+        // PTT 的特殊處理
         if (isPTT) {
             headers['Origin'] = 'https://www.ptt.cc';
+            
+            // PTT 需要 over18=1 的 Cookie 來確認已滿18歲
+            // 先嘗試訪問首頁獲取 Cookie
+            try {
+                console.log('PTT 網站：先訪問首頁獲取 Cookie...');
+                const homeResponse = await client.get('https://www.ptt.cc/', {
+                    headers: headers,
+                    timeout: 30000
+                });
+                console.log('PTT 首頁訪問成功，Cookie 已設置');
+            } catch (error) {
+                console.log('PTT 首頁訪問失敗，繼續嘗試:', error.message);
+            }
+            
+            // 設置 PTT 需要的 Cookie
+            await jar.setCookie('over18=1', 'https://www.ptt.cc');
         }
         
         const directResponse = await client.get(url, {
