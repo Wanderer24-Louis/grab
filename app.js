@@ -23,18 +23,16 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true })); // 添加這一行處理 form 數據
 app.use(express.static('public'));
 
-// API 密鑰驗證中間件
+// API 密鑰驗證中間件（可選，如果提供了API密鑰則驗證，否則跳過）
 const validateApiKey = (req, res, next) => {
     const providedKey = req.headers['x-api-key'] || req.body.apiKey || req.query.apiKey;
     
+    // 如果沒有提供API密鑰，直接通過（允許公開訪問）
     if (!providedKey) {
-        return res.status(401).json({
-            success: false,
-            error: '缺少API密鑰',
-            message: '請在請求中提供API密鑰'
-        });
+        return next();
     }
     
+    // 如果提供了API密鑰，則驗證
     if (providedKey !== API_KEY) {
         return res.status(403).json({
             success: false,

@@ -303,7 +303,6 @@
 
         <div class="input-section">
             <input type="url" id="urlInput" placeholder="請輸入網址 (例如：https://example.com)" required>
-            <input type="password" id="apiKeyInput" placeholder="API密鑰 (可選)" value="IOnREPkNgH5O3QkuJyTZo2UujCdPDLlOfiSQZeY57B" style="width: 200px;">
             <button onclick="fetchImages()">抓取圖片</button>
         </div>
         <div id="loading" class="loading" style="display: none;">載入中...</div>
@@ -428,21 +427,13 @@
                     try {
                         console.log(`嘗試第 ${retryCount + 1} 次請求`);
                         
-                        const apiKey = document.getElementById('apiKeyInput').value.trim();
                         const headers = {
                             'Content-Type': 'application/x-www-form-urlencoded',
                             'Accept': 'application/json',
                             'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7'
                         };
                         
-                        // 如果有API密鑰，添加到請求中
-                        if (apiKey) {
-                            headers['X-API-Key'] = apiKey;
-                        }
-                        
-                        const bodyData = apiKey ? 
-                            `url=${encodeURIComponent(url)}&apiKey=${encodeURIComponent(apiKey)}` :
-                            `url=${encodeURIComponent(url)}`;
+                        const bodyData = `url=${encodeURIComponent(url)}`;
                         
                         response = await fetch('https://ptt-image-grabber.onrender.com/fetch_images', {
                             method: 'POST',
@@ -502,10 +493,6 @@
                                 }
                             }
                             
-                            // 如果是 401 錯誤（缺少 API 密鑰）
-                            if (response.status === 401) {
-                                errorMessage = '缺少 API 密鑰，請在輸入框中輸入 API 密鑰';
-                            }
                             
                             throw new Error(errorMessage);
                         }
@@ -568,10 +555,6 @@
                 // 處理常見錯誤
                 if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
                     errorMessage = '無法連接到伺服器，請檢查：\n1. 網路連線是否正常\n2. 伺服器是否正在運行\n3. 是否被防火牆阻擋';
-                } else if (error.message.includes('缺少 API 密鑰')) {
-                    errorMessage = '缺少 API 密鑰，請在輸入框中輸入 API 密鑰';
-                } else if (error.message.includes('無效的API密鑰')) {
-                    errorMessage = 'API 密鑰不正確，請檢查輸入的 API 密鑰';
                 } else if (error.message.includes('找不到圖片')) {
                     errorMessage = '在該網頁中未找到任何圖片';
                 }
