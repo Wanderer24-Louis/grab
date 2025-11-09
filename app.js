@@ -14,6 +14,11 @@ const port = process.env.PORT || 10000;
 const FLARESOLVERR_URL = process.env.FLARESOLVERR_URL || 'http://localhost:8191/v1';
 const FLARESOLVERR_SESSION = 'ptt_session';
 
+// 記錄 FlareSolverr 配置
+console.log('FlareSolverr 配置:');
+console.log('  URL:', FLARESOLVERR_URL);
+console.log('  Session:', FLARESOLVERR_SESSION);
+
 // API 密鑰設定
 const API_KEY = process.env.API_KEY || 'IOnREPkNgH5O3QkuJyTZo2UujCdPDLlOfiSQZeY57B';
 
@@ -82,18 +87,28 @@ function processImgurUrl(url) {
 // 使用 FlareSolverr 發送請求
 async function makeRequest(url) {
     // 先嘗試使用 FlareSolverr（如果配置了）
+    console.log(`FlareSolverr URL: ${FLARESOLVERR_URL}`);
     if (FLARESOLVERR_URL && FLARESOLVERR_URL !== 'http://localhost:8191/v1') {
         try {
             console.log(`嘗試使用 FlareSolverr 請求: ${url}`);
-            const response = await axios.post(`${FLARESOLVERR_URL}/request`, {
+            const flaresolverrUrl = `${FLARESOLVERR_URL}/request`;
+            console.log(`FlareSolverr 完整 URL: ${flaresolverrUrl}`);
+            
+            const response = await axios.post(flaresolverrUrl, {
                 cmd: 'request.get',
                 url: url,
                 session: FLARESOLVERR_SESSION,
                 maxTimeout: 60000,
                 returnOnlyCookies: false
             }, {
-                timeout: 90000  // 增加超時時間，因為 FlareSolverr 需要時間處理
+                timeout: 90000,  // 增加超時時間，因為 FlareSolverr 需要時間處理
+                headers: {
+                    'Content-Type': 'application/json'
+                }
             });
+
+            console.log('FlareSolverr 回應狀態:', response.status);
+            console.log('FlareSolverr 回應數據:', JSON.stringify(response.data).substring(0, 500));
 
             if (response.data && response.data.status === 'success') {
                 console.log('FlareSolverr 請求成功');
@@ -110,10 +125,15 @@ async function makeRequest(url) {
         } catch (error) {
             console.log(`FlareSolverr 請求失敗: ${error.message}`);
             if (error.response) {
-                console.log('FlareSolverr 回應:', error.response.data);
+                console.log('FlareSolverr 回應狀態:', error.response.status);
+                console.log('FlareSolverr 回應數據:', JSON.stringify(error.response.data).substring(0, 500));
+            } else if (error.request) {
+                console.log('FlareSolverr 請求發送但無回應，可能是服務不可用');
             }
             // 繼續嘗試直接請求
         }
+    } else {
+        console.log('FlareSolverr 未配置或使用本地 URL，跳過 FlareSolverr');
     }
 
     // 如果 FlareSolverr 失敗或未配置，嘗試直接請求（使用更完整的瀏覽器標頭）
